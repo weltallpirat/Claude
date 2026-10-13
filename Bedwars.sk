@@ -250,14 +250,17 @@ function bwSweepWorlds():
             delete {-bw::empty::%{_n}%}
 
 # Setzt Schmiede, Upgrades und Teamtruhen einer Welt sofort zurück, sobald der letzte Spieler sie verlassen hat
-function bwCheckEmpty(w: world, leaver: player):
+function bwCheckEmpty(leaver: player, exclude: boolean):
     wait 2 seconds
-    set {_n} to 0
-    loop all players in {_w}:
-        if loop-player is not {_leaver}:
+    loop all worlds:
+        set {_n} to 0
+        loop all players in loop-world:
+            if {_exclude} is true:
+                if loop-player is {_leaver}:
+                    continue
             add 1 to {_n}
-    if {_n} is 0:
-        bwResetWorldData({_w})
+        if {_n} is 0:
+            bwResetWorldData(loop-world)
 
 every 30 seconds:
     bwSweepWorlds()
@@ -317,7 +320,8 @@ on explode:
             remove {_keep::*} from exploded blocks
 
 on explode:
-    if "{@protect_landscape}" is "true":
+    set {_pl} to "{@protect_landscape}"
+    if {_pl} is "true":
         loop exploded blocks:
             if isLandscape(loop-block) is true:
                 add loop-block to {_protect::*}
@@ -589,7 +593,14 @@ command /bwroundstart [<text>] [<text>]:
                 loop all worlds:
                     set {_wn} to name of loop-world in lowercase
                     set {_an} to arg-1 in lowercase
-                    if {_wn} is {_an} or "%{_wn}%" contains "%{_an}%" or "%{_an}%" contains "%{_wn}%":
+                    set {_hit} to false
+                    if {_wn} is {_an}:
+                        set {_hit} to true
+                    else if "%{_wn}%" contains {_an}:
+                        set {_hit} to true
+                    else if "%{_an}%" contains {_wn}:
+                        set {_hit} to true
+                    if {_hit} is true:
                         set {_w} to loop-world
                         exit loop
             if {_w} is set:
@@ -933,7 +944,7 @@ every 10 ticks:
 # 10. RESET BEIM LEAVEN
 # =========================================================
 on command "/bw leave":
-    bwCheckEmpty(world of player, player)
+    bwCheckEmpty(player, true)
     delete {bw::invis::%player%}
     delete {bw::invis_armor::%player%::*}
     delete {bw::invis_token::%player%}
@@ -942,7 +953,7 @@ on command "/bw leave":
     delete {-bw::tc::%uuid of player%}
 
 on quit:
-    bwCheckEmpty(world of player, player)
+    bwCheckEmpty(player, true)
     delete {bw::invis::%player%}
     delete {bw::invis_armor::%player%::*}
     delete {bw::invis_token::%player%}
@@ -951,7 +962,7 @@ on quit:
     delete {-bw::tc::%uuid of player%}
 
 on world change:
-    bwCheckEmpty(past world, player)
+    bwCheckEmpty(player, false)
     delete {bw::invis::%player%}
     delete {bw::invis_armor::%player%::*}
     delete {bw::invis_token::%player%}
