@@ -17,10 +17,14 @@ function bwTcRefresh():
     delete {-bwtc::game::*}
     delete {-bwtc::arenas::*}
     delete {-bwtc::spec::*}
+    delete {-bwtc::jrn::*}
     loop all players:
         add name of loop-player to {-bwtc::online::*}
         if bwInGame(loop-player) is true:
             add name of loop-player to {-bwtc::game::*}
+        # Jump & Run: wie viele Checkpoints hat der Spieler erreicht (fuer /jn checkpoint <Tab>)
+        if {-bwx::jr::active::%uuid of loop-player%} is true:
+            set {-bwtc::jrn::%name of loop-player%} to {-bwx::jr::n::%uuid of loop-player%}
     loop all worlds:
         if bwIsArena(loop-world) is true:
             add name of loop-world to {-bwtc::arenas::*}
@@ -95,9 +99,27 @@ function bwTcCandidates(me: text, c: text, pos: number, a1: text, a2: text) :: t
     else if {_c} is "gamble" or "gluecksrad" or "wheel":
         if {_pos} is 1:
             add "rad" and "muenzwurf" and "slots" and "roulette" and "blackjack" and "bonus" and "stats" to {_r::*}
-    else if {_c} is "jumprun" or "jr":
+    else if {_c} is "jumprun" or "jr" or "jn":
         if {_pos} is 1:
-            add "stop" and "cp" and "setfinish" and "delfinish" to {_r::*}
+            add "checkpoint" and "list" and "stop" and "setfinish" and "delfinish" to {_r::*}
+        else if {_pos} is 2:
+            if {_a1} is "checkpoint" or "cp":
+                add "start" to {_r::*}
+                set {_k} to {-bwtc::jrn::%{_me}%}
+                if {_k} is set:
+                    loop {_k} times:
+                        add "%loop-number%" to {_r::*}
+    else if {_c} is "musik" or "music":
+        # /musik play <Distanz> <Datei>: Dateien kommen aus dem Ordner plugins/Musik (siehe BedwarsMusik.sk)
+        if {_pos} is 1:
+            add "play" and "stop" and "list" and "reload" to {_r::*}
+        else if {_pos} is 2:
+            if {_a1} is "play":
+                add "16" and "30" and "50" and "75" and "100" to {_r::*}
+        else if {_pos} is 3:
+            if {_a1} is "play":
+                loop {-bwx::music::files::*}:
+                    add "%loop-value%" to {_r::*}
     else if {_c} is "inhaber" or "owner" or "owners":
         if {_pos} is 1:
             add "add" and "remove" to {_r::*}
