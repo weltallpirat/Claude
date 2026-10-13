@@ -2552,6 +2552,9 @@ on inventory click:
 # Ziel (optional, Admin): /jumprun setfinish  (auf der Ziel-Platte stehen). Wer sie im Jump & Run betritt,
 # bekommt {@jr_reward} Punkte (alle {@jr_cooldown_minutes} Minuten, die Bestzeit wird immer gespeichert).
 # Läuft nur ausserhalb von Arena-Welten. /jumprun stop beendet, /jumprun cp bringt dich zum Checkpoint.
+# Kurzbefehl /jn: Jeder Checkpoint hat eine feste Nummer (1, 2, 3 ... in der Reihenfolge des Erreichens).
+#   /jn checkpoint <Nummer> = dorthin, /jn checkpoint start = zum Start, /jn checkpoint = aktueller, /jn list.
+#   Dieselbe Platte bekommt nie eine zweite Nummer. Wer zu Checkpoint 2 geht, wird bei einem Sturz auch dorthin gesetzt.
 # Die 3 Jump-&-Run-Items liegen in den Hotbar-Slots 3, 4 und 5. Vorherige Items dieser Slots werden gemerkt.
 function bwJrGive(p: player):
     set {_u} to "%uuid of {_p}%"
@@ -2588,7 +2591,10 @@ function bwJrReset(p: player):
     teleport {_p} to {_sl}
     set fall distance of {_p} to 0
     delete {-bwx::jr::seen::%{_u}%::*}
-    set {-bwx::jr::seen::%{_u}%::%{-bwx::jr::startkey::%{_u}%}%} to true
+    delete {-bwx::jr::loc::%{_u}%::*}
+    set {-bwx::jr::seen::%{_u}%::%{-bwx::jr::startkey::%{_u}%}%} to 0
+    set {-bwx::jr::loc::%{_u}%::0} to {_sl}
+    set {-bwx::jr::cur::%{_u}%} to 0
     set {-bwx::jr::cp::%{_u}%} to {_sl}
     set {-bwx::jr::n::%{_u}%} to 0
     set {-bwx::jr::falls::%{_u}%} to 0
@@ -2600,6 +2606,8 @@ function bwJrStop(p: player):
     set {_u} to "%uuid of {_p}%"
     bwJrRestore({_p})
     delete {-bwx::jr::seen::%{_u}%::*}
+    delete {-bwx::jr::loc::%{_u}%::*}
+    delete {-bwx::jr::cur::%{_u}%}
     delete {-bwx::jr::startloc::%{_u}%}
     delete {-bwx::jr::startkey::%{_u}%}
     delete {-bwx::jr::active::%{_u}%}
@@ -2608,6 +2616,31 @@ function bwJrStop(p: player):
     delete {-bwx::jr::start::%{_u}%}
     delete {-bwx::jr::plate::%{_u}%}
     delete {-bwx::jr::falls::%{_u}%}
+
+# Zu Checkpoint Nummer {_n} teleportieren (0 = Start). Danach ist dieser Checkpoint der aktive
+# (dorthin geht es auch, wenn man faellt). Die Nummer einer Platte bleibt fuer die ganze Runde gleich.
+function bwJrGoto(p: player, n: number):
+    set {_u} to "%uuid of {_p}%"
+    if {-bwx::jr::active::%{_u}%} is not true:
+        send "&cDu bist in keinem Jump & Run." to {_p}
+        stop
+    set {_max} to {-bwx::jr::n::%{_u}%}
+    if {-bwx::jr::loc::%{_u}%::%{_n}%} is not set:
+        if {_max} is 0:
+            send "&cDu hast noch keinen Checkpoint erreicht. Tritt auf weitere Pale-Oak-Platten." to {_p}
+        else:
+            send "&cCheckpoint %{_n}% hast du noch nicht erreicht. Du hast die Checkpoints &f1 bis %{_max}%&c." to {_p}
+        stop
+    set {_loc} to {-bwx::jr::loc::%{_u}%::%{_n}%}
+    teleport {_p} to {_loc}
+    set fall distance of {_p} to 0
+    set {-bwx::jr::cp::%{_u}%} to {_loc}
+    set {-bwx::jr::cur::%{_u}%} to {_n}
+    if {_n} is 0:
+        send action bar "&aZurück zum Start." to {_p}
+    else:
+        send action bar "&aZurück zu Checkpoint %{_n}%." to {_p}
+    play sound "entity.enderman.teleport" with volume 0.6 and pitch 1.2 to {_p}
 
 function bwJrFinish(p: player, u: text):
     set {_t} to difference between {-bwx::jr::start::%{_u}%} and now
@@ -2650,14 +2683,28 @@ on step on pale oak pressure plate:
         if {bwx::jrfinish::%name of world of {_p}%} is {_l}:
             bwJrFinish({_p}, {_u})
             stop
-        # Schon betretene Platte: es ändert sich nichts. Neue Platte = neuer Checkpoint
+        # Schon bekannte Platte: sie behaelt ihre Nummer (wird NIE doppelt gezaehlt) und ist wieder der aktive Checkpoint
         if {-bwx::jr::seen::%{_u}%::%{_key}%} is set:
+            set {_k} to {-bwx::jr::seen::%{_u}%::%{_key}%}
+            if {-bwx::jr::loc::%{_u}%::%{_k}%} is set:
+                if {-bwx::jr::cur::%{_u}%} is not {_k}:
+                    set {-bwx::jr::cur::%{_u}%} to {_k}
+                    set {-bwx::jr::cp::%{_u}%} to {-bwx::jr::loc::%{_u}%::%{_k}%}
+                    if {_k} is 0:
+                        send action bar "&aStart &7ist wieder aktiv" to {_p}
+                    else:
+                        send action bar "&aCheckpoint %{_k}% &7ist wieder aktiv" to {_p}
+                    play sound "block.note_block.chime" with volume 1 and pitch 1.2 to {_p}
             stop
-        set {-bwx::jr::seen::%{_u}%::%{_key}%} to true
+        # Neue Platte = naechster Checkpoint mit der naechsten freien Nummer
+        set {_k} to {-bwx::jr::n::%{_u}%} + 1
+        set {-bwx::jr::n::%{_u}%} to {_k}
+        set {-bwx::jr::seen::%{_u}%::%{_key}%} to {_k}
+        set {-bwx::jr::loc::%{_u}%::%{_k}%} to {_cp}
+        set {-bwx::jr::cur::%{_u}%} to {_k}
         set {-bwx::jr::plate::%{_u}%} to {_l}
         set {-bwx::jr::cp::%{_u}%} to {_cp}
-        add 1 to {-bwx::jr::n::%{_u}%}
-        send action bar "&a&lCheckpoint %{-bwx::jr::n::%{_u}%}% &7gespeichert" to {_p}
+        send action bar "&a&lCheckpoint %{_k}% &7gespeichert" to {_p}
         play sound "block.note_block.chime" with volume 1 and pitch 1.5 to {_p}
         stop
     if {bwx::jrfinish::%name of world of {_p}%} is {_l}:
@@ -2669,12 +2716,16 @@ on step on pale oak pressure plate:
     set {-bwx::jr::n::%{_u}%} to 0
     set {-bwx::jr::falls::%{_u}%} to 0
     set {-bwx::jr::start::%{_u}%} to now
-    set {-bwx::jr::seen::%{_u}%::%{_key}%} to true
+    delete {-bwx::jr::seen::%{_u}%::*}
+    delete {-bwx::jr::loc::%{_u}%::*}
+    set {-bwx::jr::seen::%{_u}%::%{_key}%} to 0
+    set {-bwx::jr::loc::%{_u}%::0} to {_cp}
+    set {-bwx::jr::cur::%{_u}%} to 0
     set {-bwx::jr::startloc::%{_u}%} to {_cp}
     set {-bwx::jr::startkey::%{_u}%} to {_key}
     bwJrGive({_p})
-    send title "&6&lJUMP & RUN" with subtitle "&7Gestartet! Jede Platte ist ein Checkpoint." to {_p} for 3 seconds
-    send "&6[Jump & Run] &7Jede weitere &fPale-Oak-Druckplatte &7ist ein Checkpoint. Beenden: &e/jumprun stop" to {_p}
+    send title "&6&lJUMP & RUN" with subtitle "&7Gestartet! Jede Platte ist ein nummerierter Checkpoint." to {_p} for 3 seconds
+    send "&6[Jump & Run] &7Jede weitere &fPale-Oak-Druckplatte &7ist ein Checkpoint (1, 2, 3 ...). Zurück: &e/jn checkpoint <Nummer> &7| Beenden: &e/jn stop" to {_p}
     play sound "entity.experience_orb.pickup" with volume 1 and pitch 1.2 to {_p}
 
 every 2 ticks:
@@ -2697,9 +2748,9 @@ on quit:
 on world change:
     bwJrStop(player)
 
-command /jumprun [<text>]:
-    aliases: jr
-    usage: /jumprun [stop | cp | setfinish | delfinish]
+command /jumprun [<text>] [<text>]:
+    aliases: jr, jn
+    usage: /jn [checkpoint <Nummer> | list | stop | setfinish | delfinish]
     trigger:
         if sender is not a player:
             send "&cNur für Spieler!" to sender
@@ -2713,12 +2764,31 @@ command /jumprun [<text>]:
                 send "&cDu bist in keinem Jump & Run." to player
             stop
         if arg-1 is "cp" or "checkpoint":
-            if {-bwx::jr::active::%{_u}%} is true:
-                teleport player to {-bwx::jr::cp::%{_u}%}
-                set fall distance of player to 0
-                send action bar "&aZurück zum Checkpoint." to player
-            else:
+            if {-bwx::jr::active::%{_u}%} is not true:
                 send "&cDu bist in keinem Jump & Run." to player
+                stop
+            # Ohne Nummer: zum aktuellen Checkpoint. "start" oder 0: zum Startpunkt
+            if arg-2 is not set:
+                bwJrGoto(player, {-bwx::jr::cur::%{_u}%})
+                stop
+            if arg-2 is "start":
+                bwJrGoto(player, 0)
+                stop
+            set {_num} to arg-2 parsed as integer
+            if {_num} is not set:
+                send "&cNutzung: /jn checkpoint <Nummer> &7(oder &fstart&7)" to player
+                stop
+            bwJrGoto(player, {_num})
+            stop
+        if arg-1 is "list" or "liste":
+            if {-bwx::jr::active::%{_u}%} is not true:
+                send "&cDu bist in keinem Jump & Run." to player
+                stop
+            set {_max} to {-bwx::jr::n::%{_u}%}
+            if {_max} is 0:
+                send "&6[Jump & Run] &7Noch kein Checkpoint erreicht. Tritt auf weitere Pale-Oak-Platten." to player
+                stop
+            send "&6[Jump & Run] &7Erreichte Checkpoints: &f1 bis %{_max}% &8| &7Aktiv: &e%{-bwx::jr::cur::%{_u}%}% &8| &7Zurück: &e/jn checkpoint <Nummer>" to player
             stop
         if arg-1 is "setfinish":
             if player is not op:
@@ -2734,7 +2804,7 @@ command /jumprun [<text>]:
             delete {bwx::jrfinish::%name of world of player%}
             send "&aZiel-Platte entfernt." to player
             stop
-        send "&6[Jump & Run] &7Tritt auf eine &fPale-Oak-Druckplatte&7, um zu starten. Weitere Platten sind Checkpoints." to player
+        send "&6[Jump & Run] &7Tritt auf eine &fPale-Oak-Druckplatte&7, um zu starten. Weitere Platten sind nummerierte Checkpoints (&e/jn checkpoint <Nummer>&7)." to player
         if {bwx::jr::best::%{_u}%} is set:
             send "&7Deine Bestzeit: &e%{bwx::jr::best::%{_u}%}%" to player
 
@@ -2922,6 +2992,35 @@ function bwHelpChoose(p: player, mode: text):
                 set lore of {_x} to "&7Team: %{bw::espteam::%loop-index%}%" and "&8[hlp=sel:%loop-index%]"
                 set slot {_n} of {_inv} to {_x}
                 add 1 to {_n}
+    else if {_mode} is "jrcp":
+        set {_uu} to "%uuid of {_p}%"
+        if {-bwx::jr::active::%{_uu}%} is true:
+            set {_x} to ender eye named "&aStart"
+            set lore of {_x} to "&7Zurück zum Startpunkt" and "&8[hlp=sel:0]"
+            set slot {_n} of {_inv} to {_x}
+            add 1 to {_n}
+            loop {-bwx::jr::n::%{_uu}%} times:
+                if {_n} < 45:
+                    set {_x} to pale oak pressure plate named "&aCheckpoint %loop-number%"
+                    if {-bwx::jr::cur::%{_uu}%} is loop-number:
+                        set lore of {_x} to "&e► Aktiver Checkpoint" and "&7Klicken zum Teleportieren" and "&8[hlp=sel:%loop-number%]"
+                    else:
+                        set lore of {_x} to "&7Klicken zum Teleportieren" and "&8[hlp=sel:%loop-number%]"
+                    set slot {_n} of {_inv} to {_x}
+                    add 1 to {_n}
+    else if {_mode} is "musik":
+        loop {-bwx::music::files::*}:
+            if {_n} < 45:
+                set {_x} to note block named "&f%loop-value%"
+                set lore of {_x} to "&7Klicken, danach Distanz wählen" and "&8[hlp=sel:%loop-value%]"
+                set slot {_n} of {_inv} to {_x}
+                add 1 to {_n}
+    else if {_mode} is "musikdist":
+        loop 16, 30, 50, 75 and 100:
+            set {_x} to compass named "&e%loop-value% Blöcke"
+            set lore of {_x} to "&7So weit ist die Musik zu hören" and "&8[hlp=sel:%loop-value%]"
+            set slot {_n} of {_inv} to {_x}
+            add 1 to {_n}
     if {_n} is 0:
         set {_x} to barrier named "&cNichts zur Auswahl vorhanden"
         set slot 22 of {_inv} to {_x}
@@ -2970,9 +3069,9 @@ function bwHelpCat(p: player, c: text):
         set slot 19 of {_inv} to bwHelpItem(player head, "&e/party", "&7Party-Befehle", "run:party")
         set slot 20 of {_inv} to bwHelpItem(goat horn, "&e/shout <Nachricht>", "&7An alle schreiben (auch Präfix @a / @t)", "flow:shout")
         # Reihe 3: Jump & Run
-        set slot 28 of {_inv} to bwHelpItem(pale oak pressure plate, "&eJump & Run", "&7Tritt auf eine Pale-Oak-Druckplatte. Platten = Checkpoints", "say:/jumprun [stop | cp]")
-        set slot 29 of {_inv} to bwHelpItem(ender eye, "&eZum Checkpoint", "&7/jumprun cp", "run:jumprun cp")
-        set slot 30 of {_inv} to bwHelpItem(barrier, "&eJump & Run beenden", "&7/jumprun stop", "run:jumprun stop")
+        set slot 28 of {_inv} to bwHelpItem(pale oak pressure plate, "&eJump & Run", "&7Tritt auf eine Pale-Oak-Druckplatte. Platten = nummerierte Checkpoints", "say:/jn checkpoint <Nummer>  |  /jn list  |  /jn stop")
+        set slot 29 of {_inv} to bwHelpItem(ender eye, "&eCheckpoint wählen", "&7/jn checkpoint <Nummer>", "flow:jrcp")
+        set slot 30 of {_inv} to bwHelpItem(barrier, "&eJump & Run beenden", "&7/jn stop", "run:jumprun stop")
     else if {_c} is "eco":
         set slot 10 of {_inv} to bwHelpItem(gold ingot, "&e/punkte", "&7Dein Level, XP, Punkte, Bank, Depot", "run:punkte")
         set slot 11 of {_inv} to bwHelpItem(emerald, "&e/pay <Spieler> <Anzahl>", "&7Punkte an einen Spieler überweisen", "flow:pay")
@@ -3031,6 +3130,11 @@ function bwHelpCat(p: player, c: text):
         set slot 47 of {_inv} to bwHelpItem(barrier, "&c/xp reset <Spieler>", "&7XP und Level eines Spielers zurücksetzen", "flow:xpreset")
         set slot 48 of {_inv} to bwHelpItem(leather chestplate, "&c/teamitem <Farbe>", "&7Brustplatte einer Teamfarbe holen (z.B. red, blue)", "say:/teamitem <Farbe>")
         set slot 50 of {_inv} to bwHelpItem(spyglass, "&c/itemdebug", "&7Name, Lore und Typ des Items in deiner Hand", "run:itemdebug")
+        set slot 0 of {_inv} to purple banner named "&5&lMusik"
+        set slot 1 of {_inv} to bwHelpItem(note block, "&c/musik play", "&7Datei und Distanz wählen, die Musik spielt an deiner Position", "flow:musik")
+        set slot 2 of {_inv} to bwHelpItem(barrier, "&c/musik stop", "&7Musik für alle Spieler beenden", "run:musik stop")
+        set slot 3 of {_inv} to bwHelpItem(paper, "&c/musik list", "&7Alle Dateien im Ordner plugins/Musik", "run:musik list")
+        set slot 4 of {_inv} to bwHelpItem(clock, "&c/musik reload", "&7Ordner neu einlesen", "run:musik reload")
     set slot {_back} of {_inv} to bwHelpItem(arrow, "&7Zurück", "&7Zum Hauptmenü", "cat:main")
     open {_inv} to {_p}
 
@@ -3083,7 +3187,7 @@ on inventory click:
                 else:
                     send "&6[Hilfe] &7Schreibe jetzt deinen Text in den Chat. &8(&eabbrechen&8 = Abbruch)" to {_p}
                 stop
-            if {_a} is "join" or "gamestop" or "esadd" or "ownrem" or "esrem" or "top" or "resetall":
+            if {_a} is "join" or "gamestop" or "esadd" or "ownrem" or "esrem" or "top" or "resetall" or "jrcp" or "musik":
                 bwHelpChoose({_p}, {_a})
                 stop
             bwHelpPick({_p}, {_a})
@@ -3091,6 +3195,11 @@ on inventory click:
         if {_a} starts with "sel:":
             replace all "sel:" with "" in {_a}
             set {_mode} to {-bwx::hlp::mode::%{_u}%}
+            if {_mode} is "musik":
+                # Datei gewaehlt -> als naechstes die Distanz waehlen
+                set {-bwx::hlp::target::%{_u}%} to {_a}
+                bwHelpChoose({_p}, "musikdist")
+                stop
             close {_p}'s inventory
             if {_mode} is "join":
                 make {_p} execute command "bw join %{_a}%"
@@ -3100,6 +3209,10 @@ on inventory click:
                 make {_p} execute command "inhaber remove %{_a}%"
             else if {_mode} is "esrem":
                 make {_p} execute command "emeraldspawner remove %{_a}%"
+            else if {_mode} is "musikdist":
+                make {_p} execute command "musik play %{_a}% %{-bwx::hlp::target::%{_u}%}%"
+            else if {_mode} is "jrcp":
+                make {_p} execute command "jn checkpoint %{_a}%"
             else if {_mode} is "top":
                 make {_p} execute command "top %{_a}%"
             else if {_mode} is "resetall":
