@@ -1,0 +1,3349 @@
+# =========================================================
+# BEDWARS EXTRAS (zweite Datei, ergänzt Bedwars.sk)
+#  1. Hilfsfunktionen
+#  2. /spectate  (Zuschauer-System, neu)
+#  3. Feuerball-Knockback (stark reduziert)
+#  4. Tabliste: Teamfarbe + Level
+#  5. Statistik: /stats, /top
+#  6. Punkte: /punkte, /pay
+#  7. Admin: /resetstats, /game stop, /cancelgame, /setbwlobby
+#  8. Kosmetik-Shop: /kosmetik (erweitert, ab 5000 Punkten)
+#  9. Chat: Slowmode + Anti-Spam (max. 2x gleiche Nachricht)
+# 10. Achievements aus
+# 11. Vorschläge: /vorschlag, /vorschlaege (Admins ohne Cooldown, mit Reset)
+# 12. Bank  13. Aktien  14. Jump & Run  15. Spruce-Türen
+# 16. Roulette  17. Blackjack  18. /chelp GUI  19. /inhaber
+# Benötigt Bedwars.sk (bwTeam, bwPts, bwXp, bwLevelOf, bwAddPoints, ...)
+# =========================================================
+
+options:
+    # Name der Gamerule fuer Advancement-Meldungen (neue MC-Versionen: show_advancement_messages,
+    # aeltere: announceAdvancements). Im Spiel mit /gamerule + Tab-Taste nachsehen.
+    advancement_rule: show_advancement_messages
+    # Muss zu Bedwars.sk passen (gleiche Werte wie dort)
+    lobby_world: Lobby
+    squad_worlds: BedwarsRooftop,BedwarsWilderWestern,BedwarsPlayground
+    # true = dieses Skript setzt die Tab-Namen (Level/Team). false = TAB-Plugin übernimmt (empfohlen mit TAB)
+    tab_skript: false
+    # true = dieses Skript schickt Level + Teamfarbe an das TAB-Plugin (/tab player ...), der Rang kommt
+    # live aus LuckPerms (%luckperms-prefix%). Gilt für ALLE LuckPerms-Gruppen. Nur aktiv, wenn tab_skript: false
+    tab_bridge: true
+    # Alle Welten, deren Name mit diesem Text beginnt, zählen zusätzlich als Arena-Welt
+    arena_prefix: Bedwars
+    # Spectate: so weit darf sich ein Zuschauer vom nächsten aktiven Spieler entfernen (Blöcke)
+    spec_leash: 120
+    # Feuerball-Knockback (Geschwindigkeit pro Tick, nicht Blöcke!):
+    #   direkt  h=0.55 / y=0.45  -> ca. 4-5 Blöcke Weite
+    #   nahe    h=0.32 / y=0.35  -> ca. 2-3 Blöcke Weite
+    # Alles bis fb_direct_range Blöcke Abstand zur Explosion zählt als Direkttreffer
+    fb_direct_range: 2.2
+    fb_direct_h: 0.55
+    fb_direct_y: 0.45
+    fb_near_h: 0.32
+    fb_near_y: 0.35
+    # Feuerball: Cooldown in Sekunden (weisser Balken in der Hotbar)
+    fb_cooldown: 1.5
+    # Feuerball: Y-Geschwindigkeit beim Draufspringen (ca. 8 Bloecke) bzw. Springen + Sprinten (ca. 10 Bloecke)
+    fb_jump_y: 1.185
+    fb_sprint_y: 1.343
+    fb_sprint_h: 0.7
+    # Windcharge: zusaetzlicher Rueckstoss (Radius in Bloecken, Hoch-Schub, Weg-Schub)
+    wc_radius: 3.5
+    wc_up: 0.6
+    wc_push: 0.3
+    # Chat: Sekunden zwischen zwei Nachrichten (0 = Slowmode aus)
+    chat_seconds: 60
+    # Dieselbe Nachricht maximal so oft hintereinander, danach so viele Minuten Sperre nur für diese Nachricht
+    chat_repeat_max: 2
+    chat_repeat_minutes: 5
+    # Vorschläge: Stunden zwischen zwei Vorschlägen pro Spieler (Admins: kein Cooldown)
+    suggest_hours: 5
+    # Bank: Zinsen in Prozent pro Stunde, maximaler Kontostand
+    bank_rate: 1
+    bank_max: 100000
+    # Aktien: Gebühr pro Kauf/Verkauf in Prozent
+    stock_fee: 2
+    # Roulette / Blackjack: Maximaleinsatz
+    roulette_max: 5000
+    bj_max: 5000
+    # Jump & Run: Belohnung am Ziel, Cooldown für die Belohnung, Sturztiefe unter dem Checkpoint
+    jr_reward: 40
+    jr_cooldown_minutes: 60
+    jr_fall_depth: 3
+
+# =========================================================
+# 1. HILFSFUNKTIONEN
+# =========================================================
+function bwIsArena(w: world) :: boolean:
+    set {_n} to "%name of {_w}%"
+    if {_n} is "{@lobby_world}":
+        return false
+    if ",{@squad_worlds}," contains ",%{_n}%,":
+        return true
+    if {_n} starts with "{@arena_prefix}":
+        return true
+    return false
+
+# true, wenn der Spieler gerade aktiv in einer Arena spielt
+function bwInGame(p: player) :: boolean:
+    if gamemode of {_p} is not survival:
+        return false
+    if bwIsArena(world of {_p}) is not true:
+        return false
+    if bwTeam({_p}) is "none":
+        return false
+    return true
+
+# Teamname -> Farbcode fürs Tab (passend zu den RGB-Werten der SBW-Teamfarben)
+function bwTeamColor(t: text) :: text:
+    if {_t} is "red":
+        return "&c"
+    if {_t} is "blue":
+        return "&1"
+    if {_t} is "light_blue":
+        return "&9"
+    if {_t} is "green":
+        return "&2"
+    if {_t} is "lime":
+        return "&a"
+    if {_t} is "yellow":
+        return "&e"
+    if {_t} is "cyan":
+        return "&b"
+    if {_t} is "white":
+        return "&f"
+    if {_t} is "pink":
+        return "&d"
+    if {_t} is "magenta":
+        return "&5"
+    if {_t} is "orange":
+        return "&6"
+    if {_t} is "gray":
+        return "&8"
+    if {_t} is "light_gray":
+        return "&7"
+    if {_t} is "brown":
+        return "&4"
+    if {_t} is "black":
+        return "&0"
+    return "&7"
+
+# Teamname -> deutscher Anzeigename (alle Farben)
+function bwTeamNameDE(t: text) :: text:
+    if {_t} is "red":
+        return "Rot"
+    if {_t} is "blue":
+        return "Blau"
+    if {_t} is "light_blue":
+        return "Hellblau"
+    if {_t} is "green":
+        return "Dunkelgrün"
+    if {_t} is "lime":
+        return "Grün"
+    if {_t} is "yellow":
+        return "Gelb"
+    if {_t} is "cyan":
+        return "Türkis"
+    if {_t} is "white":
+        return "Weiß"
+    if {_t} is "pink":
+        return "Rosa"
+    if {_t} is "magenta":
+        return "Lila"
+    if {_t} is "orange":
+        return "Orange"
+    if {_t} is "gray":
+        return "Grau"
+    if {_t} is "light_gray":
+        return "Hellgrau"
+    if {_t} is "brown":
+        return "Braun"
+    if {_t} is "black":
+        return "Schwarz"
+    set {_n} to {_t}
+    replace all "team" with "Team " in {_n}
+    return {_n}
+
+# Text in Zeilen mit höchstens n Zeichen umbrechen (für Lore)
+function bwWrap(t: text, n: number) :: texts:
+    set {_words::*} to split {_t} at " "
+    set {_line} to ""
+    loop {_words::*}:
+        if {_line} is "":
+            set {_try} to "%loop-value%"
+        else:
+            set {_try} to "%{_line}% %loop-value%"
+        if length of {_try} > {_n}:
+            if {_line} is not "":
+                add "&f%{_line}%" to {_out::*}
+            set {_line} to "%loop-value%"
+        else:
+            set {_line} to {_try}
+    if {_line} is not "":
+        add "&f%{_line}%" to {_out::*}
+    return {_out::*}
+
+# Partikel (alle Partikelnamen des Skripts stehen NUR hier -> bei einem Fehler nur diese Zeilen ändern)
+function bwPart(k: text, l: location):
+    if {_k} is "flame":
+        draw flame particle at {_l}
+    else if {_k} is "heart":
+        draw heart particle at {_l}
+    else if {_k} is "villager":
+        draw happy villager particle at {_l}
+    else if {_k} is "crit":
+        draw crit particle at {_l}
+    else if {_k} is "endrod":
+        draw end rod particle at {_l}
+    else if {_k} is "note":
+        draw note particle at {_l}
+    else if {_k} is "soul":
+        draw soul fire flame particle at {_l}
+    else if {_k} is "firework":
+        draw firework particle at {_l}
+    else if {_k} is "dragon":
+        draw dragon breath particle at {_l}
+    else if {_k} is "totem":
+        draw totem of undying particle at {_l}
+    else if {_k} is "snow":
+        draw snowflake particle at {_l}
+    else if {_k} is "enchant":
+        draw glow particle at {_l}
+    else if {_k} is "portal":
+        draw portal particle at {_l}
+    else if {_k} is "witch":
+        draw witch particle at {_l}
+    else if {_k} is "spark":
+        draw electric spark particle at {_l}
+    else if {_k} is "glow":
+        draw glow particle at {_l}
+    else if {_k} is "sculk":
+        draw sculk soul particle at {_l}
+    else if {_k} is "lv5":
+        draw crit particle at {_l}
+        draw cloud particle at {_l}
+    else if {_k} is "lv10":
+        draw soul fire flame particle at {_l}
+        draw flame particle at {_l}
+    else if {_k} is "lv20":
+        draw firework particle at {_l}
+        draw end rod particle at {_l}
+    else if {_k} is "lv30":
+        draw glow particle at {_l}
+        draw electric spark particle at {_l}
+    else if {_k} is "lv40":
+        draw dragon breath particle at {_l}
+        draw portal particle at {_l}
+    else if {_k} is "lv50":
+        draw totem of undying particle at {_l}
+        draw firework particle at {_l}
+    else if {_k} is "lv75":
+        draw sculk soul particle at {_l}
+        draw soul fire flame particle at {_l}
+        draw end rod particle at {_l}
+    else if {_k} is "lv100":
+        draw totem of undying particle at {_l}
+        draw dragon breath particle at {_l}
+        draw heart particle at {_l}
+    else:
+        draw cloud particle at {_l}
+
+# Ring aus 12 Partikeln um einen Punkt
+function bwRing(k: text, l: location, r: number, y: number):
+    loop 12 times:
+        set {_a} to loop-number * 30
+        bwPart({_k}, ({_l} offset by vector(cos({_a}) * {_r}, {_y}, sin({_a}) * {_r})))
+
+# Effekt-Ausbruch (Betten, Kills): steps Ringe, die sich um step Blöcke pro Tick weiten
+function bwBurst(id: text, l: location, steps: number, step: number):
+    set {_k} to bwCosPart({_id})
+    if {_k} is "lightning":
+        strike lightning effect at {_l}
+        play sound "entity.lightning_bolt.thunder" with volume 1 and pitch 1 at {_l}
+        stop
+    play sound "entity.generic.explode" with volume 0.7 and pitch 1.4 at {_l}
+    loop {_steps} times:
+        bwRing({_k}, {_l}, loop-number * {_step}, loop-number * 0.12)
+        wait 1 tick
+
+# Statistik-Zähler (games, wins, kills, finalkills, deaths, beds)
+function bwStatAdd(p: player, k: text, n: number):
+    set {_u} to "%uuid of {_p}%"
+    add {_n} to {bwst::%{_k}%::%{_u}%}
+    set {bwx::name::%{_u}%} to name of {_p}
+
+function bwStat(u: text, k: text) :: number:
+    if {bwst::%{_k}%::%{_u}%} is not set:
+        return 0
+    return {bwst::%{_k}%::%{_u}%}
+
+# =========================================================
+# 2. /spectate  (Zuschauer-System)
+# =========================================================
+# /spectate [arena|spieler]   einem laufenden SPIEL zuschauen (Spectator-Modus: frei fliegen, nichts anfassen)
+# /spectate                   als Zuschauer: öffnet die Spielerauswahl (Folgen / hinteleportieren)
+# /spectate frei              Folge-Modus beenden und wieder frei fliegen
+# /spectate leave             Zuschauen beenden
+# Ohne Arena-Name: läuft genau ein Spiel, gehst du dorthin; sonst bekommst du die Liste.
+# Zuschauer sind echte Zuschauer: Spectator-Modus, keine Interaktion, keine Container, keine Befehle
+# (ausser /spectate, /chelp, /inhaber, /bw). Sie fliegen frei, werden aber nie weiter als {@spec_leash}
+# Blöcke vom nächsten aktiven Spieler wegfliegen. Endet das Spiel (5 Sekunden lang kein aktiver Spieler
+# in der Arena), wird das Zuschauen automatisch beendet. Kurze Aussetzer der Team-Erkennung beenden das
+# Zuschauen NICHT mehr.
+function bwSpecStop(p: player):
+    set {_u} to "%uuid of {_p}%"
+    if {-bwx::spec::%{_u}%} is not set:
+        stop
+    delete {-bwx::spec::%{_u}%}
+    delete {-bwx::specfollow::%{_u}%}
+    delete {-bwx::specempty::%{_u}%}
+    set {_gm} to {bwx::specgm::%{_u}%}
+    if {_gm} is not set:
+        set {_gm} to survival
+    if "%{_gm}%" is "spectator":
+        set {_gm} to survival
+    set gamemode of {_p} to {_gm}
+    if {bwx::specloc::%{_u}%} is set:
+        teleport {_p} to {bwx::specloc::%{_u}%}
+    else if {bwx::lobbyloc} is set:
+        teleport {_p} to {bwx::lobbyloc}
+    delete {bwx::specloc::%{_u}%}
+    delete {bwx::specgm::%{_u}%}
+    send "&aDu schaust nicht mehr zu." to {_p}
+
+# Alle aktiven Spieler (lebend, im Team) einer Welt
+function bwSpecPlayers(w: world) :: players:
+    loop all players in {_w}:
+        if bwInGame(loop-player) is true:
+            add loop-player to {_r::*}
+    return {_r::*}
+
+# Anzahl aktiver Spieler in einer Welt
+function bwSpecActive(w: world) :: number:
+    set {_n} to 0
+    loop all players in {_w}:
+        if bwInGame(loop-player) is true:
+            add 1 to {_n}
+    return {_n}
+
+# Alle Arena-Welten, in denen gerade gespielt wird
+function bwSpecWorlds() :: worlds:
+    loop all worlds:
+        if bwIsArena(loop-world) is true:
+            if bwSpecActive(loop-world) > 0:
+                add loop-world to {_r::*}
+    return {_r::*}
+
+# Nächster aktiver Spieler zu p in der Welt w (Liste mit 0 oder 1 Element)
+function bwSpecNearest(p: player, w: world) :: players:
+    set {_best} to 999999
+    loop all players in {_w}:
+        if bwInGame(loop-player) is true:
+            set {_d} to distance between loop-player and {_p}
+            if {_d} < {_best}:
+                set {_best} to {_d}
+                set {_near} to loop-player
+    return {_near}
+
+# Kamera hinter und über einen Spieler setzen
+function bwSpecGoto(p: player, t: player):
+    set {_yaw} to yaw of {_t}
+    set {_l} to (location of {_t}) offset by vector(sin({_yaw}) * 3, 2, 0 - (cos({_yaw}) * 3))
+    set yaw of {_l} to {_yaw}
+    set pitch of {_l} to 20
+    teleport {_p} to {_l}
+
+function bwSpecFollow(p: player, t: player):
+    set {_u} to "%uuid of {_p}%"
+    set {-bwx::specfollow::%{_u}%} to {_t}
+    bwSpecGoto({_p}, {_t})
+    send "&aDu folgst jetzt &f%name of {_t}%&a. &7Frei fliegen: &e/spectate frei" to {_p}
+
+function bwSpecStart(p: player, w: world):
+    set {_u} to "%uuid of {_p}%"
+    set {_act::*} to bwSpecPlayers({_w})
+    if size of {_act::*} is 0:
+        send "&cIn dieser Arena spielt gerade niemand." to {_p}
+        stop
+    if {-bwx::spec::%{_u}%} is not set:
+        set {bwx::specloc::%{_u}%} to location of {_p}
+        set {bwx::specgm::%{_u}%} to gamemode of {_p}
+    set {-bwx::spec::%{_u}%} to "%name of {_w}%"
+    delete {-bwx::specfollow::%{_u}%}
+    delete {-bwx::specempty::%{_u}%}
+    set {_first} to random element out of {_act::*}
+    teleport {_p} to ((location of {_first}) offset by vector(0, 12, 0))
+    # Manche Welt-Plugins (z.B. Multiverse "force gamemode") setzen beim Weltwechsel Survival.
+    # Deshalb erst NACH dem Teleport auf Spectator stellen und danach laufend erzwingen.
+    wait 3 ticks
+    set gamemode of {_p} to spectator
+    send "&aDu schaust jetzt dem Spiel in &f%name of {_w}% &azu und kannst frei umherfliegen." to {_p}
+    send "&7Spieler auswählen: &e/spectate &8| &7Beenden: &e/spectate leave" to {_p}
+
+function bwSpecMenu(p: player):
+    set {_u} to "%uuid of {_p}%"
+    if {-bwx::spec::%{_u}%} is not set:
+        stop
+    set {_w} to world "%{-bwx::spec::%{_u}%}%"
+    if {_w} is not set:
+        stop
+    set {_inv} to chest inventory with 3 rows named "&8Zuschauer &7- Spieler wählen"
+    set {_n} to 0
+    loop bwSpecPlayers({_w}):
+        if {_n} < 18:
+            set {_pl} to loop-value
+            set {_t} to bwTeam({_pl})
+            set {_x} to bwTeamWool({_t})
+            set name of {_x} to "%bwTeamColor({_t})%%name of {_pl}%"
+            set {_hp} to floor((health of {_pl}) / 2)
+            set lore of {_x} to "&7Team: %bwTeamColor({_t})%%bwTeamNameDE({_t})%" and "&7Leben: &c%{_hp}% ❤" and "&aLinksklick: folgen" and "&eRechtsklick: hinteleportieren" and "&8[spec=%name of {_pl}%]"
+            set slot {_n} of {_inv} to {_x}
+            add 1 to {_n}
+    set {_x} to feather named "&bFrei fliegen"
+    set lore of {_x} to "&7Folge-Modus beenden" and "&8[spec=free]"
+    set slot 22 of {_inv} to {_x}
+    set {_x} to barrier named "&cZuschauen beenden"
+    set lore of {_x} to "&7Zurück in die Lobby" and "&8[spec=leave]"
+    set slot 26 of {_inv} to {_x}
+    open {_inv} to {_p}
+
+command /spectate [<text>]:
+    aliases: zuschauen
+    usage: /spectate [arena|spieler] | /spectate frei | /spectate leave
+    trigger:
+        if sender is not a player:
+            send "&cNur für Spieler!" to sender
+            stop
+        set {_u} to "%uuid of player%"
+        if arg-1 is "leave" or "stop" or "ende":
+            if {-bwx::spec::%{_u}%} is set:
+                bwSpecStop(player)
+            else:
+                send "&cDu schaust gerade keinem Spiel zu." to player
+            stop
+        if {-bwx::spec::%{_u}%} is set:
+            if arg-1 is not set:
+                bwSpecMenu(player)
+                stop
+            if arg-1 is "frei" or "free":
+                delete {-bwx::specfollow::%{_u}%}
+                send "&aDu fliegst jetzt frei." to player
+                stop
+        if bwInGame(player) is true:
+            send "&cDu spielst gerade selbst und kannst nicht zuschauen." to player
+            stop
+        set {_ws::*} to bwSpecWorlds()
+        if size of {_ws::*} is 0:
+            send "&cZurzeit läuft kein Spiel, dem du zuschauen kannst." to player
+            stop
+        if arg-1 is set:
+            set {_tp} to arg-1 parsed as player
+            if {_tp} is set:
+                if bwInGame({_tp}) is true:
+                    if {-bwx::spec::%{_u}%} is not set:
+                        bwSpecStart(player, world of {_tp})
+                    bwSpecFollow(player, {_tp})
+                else:
+                    send "&cDer Spieler &f%arg-1% &cspielt gerade nicht aktiv mit." to player
+                stop
+            set {_w} to world arg-1
+            if {_w} is not set:
+                send "&cArena oder Spieler &f%arg-1% &cwurde nicht gefunden." to player
+                stop
+            if {_ws::*} does not contain {_w}:
+                send "&cIn der Arena &f%arg-1% &cläuft gerade kein Spiel." to player
+                stop
+        else:
+            if size of {_ws::*} is 1:
+                set {_w} to {_ws::1}
+            else:
+                send "&6Laufende Spiele (&e/spectate <arena>&6):" to player
+                loop {_ws::*}:
+                    send "&e%name of loop-value% &7(%bwSpecActive(loop-value)% Spieler)" to player
+                stop
+        bwSpecStart(player, {_w})
+
+on inventory click:
+    set {_t} to "%name of player's current inventory%"
+    if {_t} contains "Zuschauer":
+        cancel event
+        set {_ci} to event-item
+        if {_ci} is not set:
+            stop
+        set {_l} to "%lore of {_ci}%"
+        if {_l} does not contain "[spec=":
+            stop
+        set {_p} to player
+        set {_u} to "%uuid of {_p}%"
+        if {-bwx::spec::%{_u}%} is not set:
+            stop
+        wait 1 tick
+        close {_p}'s inventory
+        if {_l} contains "[spec=leave]":
+            bwSpecStop({_p})
+            stop
+        if {_l} contains "[spec=free]":
+            delete {-bwx::specfollow::%{_u}%}
+            send "&aDu fliegst jetzt frei." to {_p}
+            stop
+        set {_w} to world "%{-bwx::spec::%{_u}%}%"
+        if {_w} is not set:
+            stop
+        loop bwSpecPlayers({_w}):
+            if {_l} contains "[spec=%name of loop-value%]":
+                set {_target} to loop-value
+        if {_target} is not set:
+            send "&cDieser Spieler ist nicht mehr im Spiel." to {_p}
+            stop
+        if click type is right mouse button or right mouse button with shift:
+            delete {-bwx::specfollow::%{_u}%}
+            bwSpecGoto({_p}, {_target})
+        else:
+            bwSpecFollow({_p}, {_target})
+
+# Zuschauer können NICHT eingreifen: keine Container, kein Rechtsklick, keine fremden Befehle
+on inventory open:
+    if {-bwx::spec::%uuid of player%} is set:
+        if "%name of event-inventory%" does not contain "Zuschauer":
+            cancel event
+
+on rightclick:
+    if {-bwx::spec::%uuid of player%} is set:
+        cancel event
+
+on command:
+    if {-bwx::spec::%uuid of player%} is not set:
+        stop
+    if player is op:
+        stop
+    set {_c} to "%command%" in lowercase
+    if {_c} is "spectate" or "zuschauen" or "chelp" or "inhaber" or "bw":
+        stop
+    cancel event
+    send "&cAls Zuschauer sind die meisten Befehle gesperrt. Beenden mit &e/spectate leave&c." to player
+
+# Folge-Modus: der Zuschauer darf sich im Umkreis frei umsehen, wird aber bei Bedarf nachgezogen
+every 5 ticks:
+    loop all players:
+        set {_u} to "%uuid of loop-player%"
+        if {-bwx::specfollow::%{_u}%} is set:
+            set {_t} to {-bwx::specfollow::%{_u}%}
+            if {_t} is not online:
+                delete {-bwx::specfollow::%{_u}%}
+                send "&eDein Ziel hat das Spiel verlassen. Du fliegst jetzt frei." to loop-player
+            else if bwInGame({_t}) is not true:
+                delete {-bwx::specfollow::%{_u}%}
+                send "&eDein Ziel ist ausgeschieden. Du fliegst jetzt frei. &7Neues Ziel: &e/spectate" to loop-player
+            else if world of {_t} is not world of loop-player:
+                delete {-bwx::specfollow::%{_u}%}
+            else if distance between loop-player and {_t} > 7:
+                bwSpecGoto(loop-player, {_t})
+
+# Zuschauen automatisch beenden (Spiel vorbei / Welt verlassen) und Zuschauer in der Arena halten
+every 10 ticks:
+    loop all players:
+        set {_u} to "%uuid of loop-player%"
+        if {-bwx::spec::%{_u}%} is set:
+            set {_p} to loop-player
+            set {_w} to world "%{-bwx::spec::%{_u}%}%"
+            if {_w} is not set:
+                bwSpecStop({_p})
+            else if world of {_p} is not {_w}:
+                bwSpecStop({_p})
+            else:
+                if gamemode of {_p} is not spectator:
+                    set gamemode of {_p} to spectator
+                set {_act::*} to bwSpecPlayers({_w})
+                if size of {_act::*} is 0:
+                    add 1 to {-bwx::specempty::%{_u}%}
+                    if {-bwx::specempty::%{_u}%} >= 10:
+                        send "&eDas Spiel ist vorbei." to {_p}
+                        bwSpecStop({_p})
+                else:
+                    delete {-bwx::specempty::%{_u}%}
+                    set {_nn::*} to bwSpecNearest({_p}, {_w})
+                    if size of {_nn::*} > 0:
+                        set {_near} to {_nn::1}
+                        if distance between {_p} and {_near} > {@spec_leash}:
+                            bwSpecGoto({_p}, {_near})
+                            send action bar "&eDu hast die Arena verlassen und wurdest zurückgeholt." to {_p}
+                    delete {_nn::*}
+            delete {_act::*}
+
+# Solange man zuschaut, darf kein anderes Plugin den Spielmodus ändern (Survival wird abgelehnt)
+on gamemode change to survival:
+    if {-bwx::spec::%uuid of player%} is set:
+        cancel event
+
+on gamemode change to adventure:
+    if {-bwx::spec::%uuid of player%} is set:
+        cancel event
+
+# Wer beim Zuschauen den Server verlässt, wird beim nächsten Join zurückgesetzt
+on quit:
+    delete {-bwx::spec::%uuid of player%}
+    delete {-bwx::specfollow::%uuid of player%}
+    delete {-bwx::specempty::%uuid of player%}
+
+on join:
+    set {_p} to player
+    set {_u} to "%uuid of {_p}%"
+    if {bwx::specloc::%{_u}%} is set:
+        wait 1 tick
+        set {_gm} to {bwx::specgm::%{_u}%}
+        if {_gm} is not set:
+            set {_gm} to survival
+        if "%{_gm}%" is "spectator":
+            set {_gm} to survival
+        set gamemode of {_p} to {_gm}
+        teleport {_p} to {bwx::specloc::%{_u}%}
+        delete {bwx::specloc::%{_u}%}
+        delete {bwx::specgm::%{_u}%}
+
+# Wer einem Spiel beitritt, hört vorher auf zuzuschauen
+on command "/bw join":
+    bwSpecStop(player)
+
+# =========================================================
+# 3. FEUERBALL-KNOCKBACK (stark reduziert)
+# =========================================================
+# Die Explosion selbst bleibt unverändert, danach wird der Rückstoß der Spieler in der Nähe
+# durch eine feste, kleine Geschwindigkeit ersetzt (Richtung: von der Explosion weg).
+# Direkttreffer (bis {@fb_direct_range} Blöcke Abstand): ca. 4-5 Blöcke.  Streutreffer: ca. 2-3 Blöcke.
+function bwFireKb(p: player, c: location, jump: boolean, sprint: boolean):
+    set {_pl} to location of {_p}
+    set {_d} to distance between {_c} and {_pl}
+    set {_h} to {@fb_near_h}
+    set {_y} to {@fb_near_y}
+    if {_d} <= {@fb_direct_range}:
+        set {_h} to {@fb_direct_h}
+        set {_y} to {@fb_direct_y}
+        if {_jump} is true:
+            set {_y} to {@fb_jump_y}
+    set {_v} to vector from {_c} to {_pl}
+    if {_d} <= {@fb_direct_range}:
+        if {_jump} is true:
+            if {_sprint} is true:
+                set {_y} to {@fb_sprint_y}
+                set {_h} to {@fb_sprint_h}
+                set {_v} to vector from {_pl} to (location 3 meters in front of {_p})
+    set y component of {_v} to 0
+    if vector length of {_v} < 0.05:
+        set {_v} to vector(0, 0, 0)
+    else:
+        set vector length of {_v} to {_h}
+    set y component of {_v} to {_y}
+    set velocity of {_p} to {_v}
+
+# Werfer jedes Feuerballs merken (für die Kill-Gutschrift)
+on shoot:
+    if shooter is a player:
+        if projectile is a fireball or a small fireball:
+            set {_p} to shooter
+            if {-bwx::fbcd::%uuid of {_p}%} is set:
+                if difference between {-bwx::fbcd::%uuid of {_p}%} and now is less than {@fb_cooldown} seconds:
+                    # Cooldown aktiv: Wurf abbrechen und das von SBW entfernte Item zurueckgeben
+                    cancel event
+                    wait 1 tick
+                    set {_diff} to {-bwx::fbcnt::%uuid of {_p}%} - bwFcCount({_p})
+                    if {_diff} > 0:
+                        set {_it} to {-bwx::fbitem::%uuid of {_p}%}
+                        set item amount of {_it} to {_diff}
+                        give {_it} to {_p}
+                    stop
+            set {-bw::fbo::%uuid of projectile%} to shooter
+            set {-bwx::fbcd::%uuid of shooter%} to now
+            set item cooldown of fire charge for shooter to {@fb_cooldown} seconds
+
+# Feuerball-Cooldown: waehrend der Wartezeit wird der Rechtsklick abgebrochen
+function bwFcCount(p: player) :: number:
+    set {_c} to 0
+    loop all items in {_p}'s inventory:
+        if loop-item is fire charge:
+            add item amount of loop-item to {_c}
+    return {_c}
+
+on rightclick holding fire charge with priority lowest:
+    set {-bwx::fbcnt::%uuid of player%} to bwFcCount(player)
+    set {-bwx::fbitem::%uuid of player%} to player's tool
+    if {-bwx::fbcd::%uuid of player%} is set:
+        if difference between {-bwx::fbcd::%uuid of player%} and now is less than {@fb_cooldown} seconds:
+            cancel event
+
+# Windcharge: zusaetzlicher Rueckstoss nach dem Aufprall (Hoch-Schub wie in Vanilla)
+on projectile hit:
+    if projectile is a wind charge:
+        if {-bwx::wkproj::%uuid of projectile%} is set:
+            delete {-bwx::wkproj::%uuid of projectile%}
+            stop
+        set {_loc} to location of projectile
+        wait 1 tick
+        loop all players in radius {@wc_radius} around {_loc}:
+            if gamemode of loop-player is survival:
+                if bwIsArena(world of loop-player) is true:
+                    set {_f} to 1 - ((distance between {_loc} and location of loop-player) / {@wc_radius})
+                    if {_f} > 0:
+                        set {_v} to vector from {_loc} to location of loop-player
+                        set y component of {_v} to 0
+                        if vector length of {_v} > 0.05:
+                            set vector length of {_v} to ({@wc_push} * {_f})
+                        else:
+                            set {_v} to vector(0, 0, 0)
+                        set y component of {_v} to ({@wc_up} * {_f})
+                        add {_v} to velocity of loop-player
+
+on explode:
+    if event-entity is a fireball or a small fireball:
+        set {_loc} to location of event-entity
+        set {_sh} to {-bw::fbo::%uuid of event-entity%}
+        delete {-bw::fbo::%uuid of event-entity%}
+        loop all players in radius 6 around {_loc}:
+            set {_u} to "%uuid of loop-player%"
+            set {_jp::%{_u}%} to true
+            if loop-player is on ground:
+                set {_jp::%{_u}%} to false
+            set {_sp::%{_u}%} to false
+            if loop-player is sprinting:
+                set {_sp::%{_u}%} to true
+        wait 1 tick
+        # Kill-Gutschrift (ohne Schaden): wer vom Feuerball getroffen wird und danach stirbt (Void, Fall), zählt für den Werfer
+        if {_sh} is a player:
+            bwCreditHit({_sh}, {_loc})
+        loop all players in radius 6 around {_loc}:
+            if gamemode of loop-player is survival:
+                if bwTeam(loop-player) is not "none":
+                    bwFireKb(loop-player, {_loc}, {_jp::%uuid of loop-player%}, {_sp::%uuid of loop-player%})
+
+# =========================================================
+# 4. TABLISTE: TEAMFARBE + LEVEL
+# =========================================================
+# Format: [Lv 12] Rot Spielername   (Team + Name in der Teamfarbe; ohne Team weiß; Zuschauer grau)
+# Wird alle 2 Sekunden und beim Join aktualisiert, gilt in der Lobby und in der Runde.
+# Einzige Stelle mit dem Tablist-Ausdruck. Falls Skript sie nicht kennt: "tablist name" durch
+# "player list name" ersetzen.
+function bwSetTab(p: player, t: text):
+    set tablist name of {_p} to {_t}
+
+# TAB-Bridge: Skript kennt Level + Team, TAB kennt den Rang. Das Skript setzt pro Spieler die
+# TAB-Eigenschaften tabprefix/tagprefix/tagsuffix (nur wenn sich etwas geändert hat) und baut den
+# LuckPerms-Rang als Platzhalter %luckperms-prefix% ein, den TAB selbst live auflöst.
+# (%% = ein echtes Prozentzeichen im Skript)
+function bwTabBridge(p: player):
+    set {_u} to "%uuid of {_p}%"
+    set {_n} to name of {_p}
+    set {_lv} to bwLevelOf(bwXp({_u}))
+    set {_t} to bwTeam({_p})
+    if bwIsArena(world of {_p}) is not true:
+        set {_t} to "none"
+    set {_rank} to "%%luckperms-prefix%%"
+    if gamemode of {_p} is spectator:
+        set {_tab} to "&8[&6Lv %{_lv}%&8] &7%{_rank}%&7"
+        set {_tagp} to "&7%{_rank}%&7"
+    else if {_t} is "none":
+        set {_tab} to "&8[&6Lv %{_lv}%&8] &f%{_rank}%&f"
+        set {_tagp} to "&f%{_rank}%&f"
+    else:
+        set {_c} to bwTeamColor({_t})
+        set {_tab} to "&8[&6Lv %{_lv}%&8] %{_c}%[%bwTeamNameDE({_t})%] &f%{_rank}%%{_c}%"
+        set {_tagp} to "%{_c}%[%bwTeamNameDE({_t})%] &f%{_rank}%%{_c}%"
+    set {_tags} to " &8[&6Lv %{_lv}%&8]"
+    set {_cache} to "%{_tab}%|%{_tagp}%|%{_tags}%"
+    if {-bwx::tabcache::%{_u}%} is {_cache}:
+        stop
+    set {-bwx::tabcache::%{_u}%} to {_cache}
+    execute console command "tab player %{_n}% tabprefix %{_tab}%"
+    execute console command "tab player %{_n}% tagprefix %{_tagp}%"
+    execute console command "tab player %{_n}% tagsuffix %{_tags}%"
+
+on quit:
+    delete {-bwx::tabcache::%uuid of player%}
+
+function bwTabName(p: player):
+    if "{@tab_skript}" is not "true":
+        if "{@tab_bridge}" is "true":
+            bwTabBridge({_p})
+        stop
+    set {_u} to "%uuid of {_p}%"
+    set {_lv} to bwLevelOf(bwXp({_u}))
+    set {_n} to name of {_p}
+    if {bwx::name::%{_u}%} is not {_n}:
+        set {bwx::name::%{_u}%} to {_n}
+    if gamemode of {_p} is spectator:
+        bwSetTab({_p}, "&8[&6Lv %{_lv}%&8] &7%{_n}%")
+        stop
+    set {_t} to bwTeam({_p})
+    # Teamfarbe nur in der Lobby/Runde eines Spiels (Arena-Welten), nie in der Welt-Lobby
+    if bwIsArena(world of {_p}) is not true:
+        set {_t} to "none"
+    if {_t} is "none":
+        bwSetTab({_p}, "&8[&6Lv %{_lv}%&8] &f%{_n}%")
+        stop
+    set {_c} to bwTeamColor({_t})
+    bwSetTab({_p}, "&8[&6Lv %{_lv}%&8] %{_c}%%bwTeamNameDE({_t})% %{_c}%%{_n}%")
+
+every 2 seconds:
+    loop all players:
+        bwTabName(loop-player)
+
+on join:
+    set {_p} to player
+    set {bwx::name::%uuid of {_p}%} to name of {_p}
+    wait 1 second
+    bwTabName({_p})
+
+# =========================================================
+# 5. STATISTIK: /stats, /top
+# =========================================================
+# Gezählt wird über die SBW-Rewards (config.yml -> /bwpoints ...) und den Tod-Event unten.
+on death of player:
+    if bwIsArena(world of victim) is true:
+        if bwTeam(victim) is not "none":
+            bwStatAdd(victim, "deaths", 1)
+        if attacker is a player:
+            set {_id} to {bwc::sel::%uuid of attacker%::kill}
+            if {_id} is set:
+                bwBurst({_id}, location of victim, 8, 0.2)
+
+function bwShowStats(s: player, u: text, n: text):
+    set {_g} to bwStat({_u}, "games")
+    set {_w} to bwStat({_u}, "wins")
+    set {_k} to bwStat({_u}, "kills")
+    set {_fk} to bwStat({_u}, "finalkills")
+    set {_d} to bwStat({_u}, "deaths")
+    set {_b} to bwStat({_u}, "beds")
+    set {_wr} to 0
+    if {_g} > 0:
+        set {_wr} to floor(({_w} / {_g}) * 1000) / 10
+    set {_kd} to {_k} + {_fk}
+    if {_d} > 0:
+        set {_kd} to floor((({_k} + {_fk}) / {_d}) * 100) / 100
+    set {_xp} to bwXp({_u})
+    send "&8&m-------&r &6Statistiken: &e%{_n}% &8&m-------" to {_s}
+    send "&7Level: &6%bwLevelOf({_xp})% &8| &7XP: &e%{_xp}% &8| &7Punkte: &e%bwPts({_u})%" to {_s}
+    send "&7Spiele: &f%{_g}% &8| &7Siege: &a%{_w}% &8| &7Siegrate: &f%{_wr}%%%" to {_s}
+    send "&7Kills: &f%{_k}% &8| &7Final Kills: &f%{_fk}% &8| &7Tode: &c%{_d}% &8| &7K/D: &f%{_kd}%" to {_s}
+    send "&7Betten zerstört: &f%{_b}%" to {_s}
+
+command /stats [<offlineplayer>]:
+    usage: /stats [spieler]
+    trigger:
+        if arg-1 is not set:
+            if sender is not a player:
+                send "&cNutzung: /stats <spieler>" to sender
+                stop
+            bwShowStats(player, "%uuid of player%", name of player)
+            stop
+        set {_u} to "%uuid of arg-1%"
+        if {bwx::name::%{_u}%} is not set:
+            send "&cVon diesem Spieler gibt es keine Daten." to sender
+            stop
+        if sender is a player:
+            bwShowStats(player, {_u}, {bwx::name::%{_u}%})
+        else:
+            set {_k} to bwStat({_u}, "kills")
+            set {_w} to bwStat({_u}, "wins")
+            send "&7Stats von %{bwx::name::%{_u}%}%: Kills %{_k}%, Wins %{_w}%" to sender
+
+function bwTopLines(k: text) :: texts:
+    if {_k} is "level":
+        loop {bwp::xp::*}:
+            set {_v::%loop-index%} to loop-value
+    else if {_k} is "punkte":
+        loop {bwp::pts::*}:
+            set {_v::%loop-index%} to loop-value
+    else:
+        loop {bwst::%{_k}%::*}:
+            set {_v::%loop-index%} to loop-value
+    set {_r} to 1
+    while {_r} <= 10:
+        set {_best} to 0
+        set {_bi} to ""
+        loop {_v::*}:
+            if loop-value > {_best}:
+                set {_best} to loop-value
+                set {_bi} to loop-index
+        if {_bi} is "":
+            set {_r} to 99
+        else:
+            set {_name} to {bwx::name::%{_bi}%}
+            if {_name} is not set:
+                set {_name} to "Unbekannt"
+            if {_k} is "level":
+                add "&e%{_r}%. &f%{_name}% &8- &6Level %bwLevelOf({_best})%" to {_out::*}
+            else:
+                add "&e%{_r}%. &f%{_name}% &8- &a%{_best}%" to {_out::*}
+            delete {_v::%{_bi}%}
+        add 1 to {_r}
+    return {_out::*}
+
+command /top [<text>]:
+    aliases: leaderboard, bestenliste
+    usage: /top [kills|wins|beds|finalkills|games|deaths|level|punkte]
+    trigger:
+        set {_k} to "kills"
+        if arg-1 is set:
+            set {_k} to arg-1 in lowercase
+        if {_k} is "siege":
+            set {_k} to "wins"
+        if {_k} is "betten":
+            set {_k} to "beds"
+        set {_valid} to false
+        if {_k} is "kills" or "wins" or "beds" or "finalkills" or "games" or "deaths" or "level" or "punkte":
+            set {_valid} to true
+        if {_valid} is false:
+            send "&cNutzung: /top [kills|wins|beds|finalkills|games|deaths|level|punkte]" to sender
+            stop
+        set {_l::*} to bwTopLines({_k})
+        send "&8&m-------&r &6Top 10: &e%{_k}% &8&m-------" to sender
+        if size of {_l::*} is 0:
+            send "&7Noch keine Einträge." to sender
+            stop
+        loop {_l::*}:
+            send loop-value to sender
+
+# =========================================================
+# 6. PUNKTE: /punkte [spieler]  |  /pay <spieler> <anzahl>
+# =========================================================
+command /punkte [<text>] [<text>] [<integer>]:
+    aliases: points, level, bwlevel
+    usage: /punkte [spieler]  |  /level add <spieler> [anzahl] (nur Admins)
+    trigger:
+        if arg-1 is "add":
+            if sender is not op:
+                send "&cKeine Berechtigung." to sender
+                stop
+            if arg-2 is not set:
+                send "&cNutzung: &e/level add <Spieler> [Anzahl]" to sender
+                stop
+            set {_t} to arg-2 parsed as player
+            if {_t} is not set:
+                send "&cSpieler &f%arg-2% &cist nicht online." to sender
+                stop
+            set {_n} to 1
+            if arg-3 is set:
+                set {_n} to arg-3
+            if {_n} < 1:
+                send "&cDie Anzahl muss mindestens 1 sein. &7(Zurücksetzen: &e/xp reset <Spieler>&7)" to sender
+                stop
+            bwAddLevels({_t}, {_n})
+            set {_tu} to "%uuid of {_t}%"
+            set {_lvl} to bwLevelOf(bwXp({_tu}))
+            send "&a%name of {_t}% ist jetzt &6Level %{_lvl}%&a." to sender
+            stop
+        if arg-1 is "schenken" or "gift" or "give":
+            send "&e/punkte schenken gibt es nicht mehr. Nutze jetzt &6/pay <Spieler> <Anzahl>&e." to sender
+            stop
+        if arg-1 is set:
+            set {_op} to arg-1 parsed as offlineplayer
+            set {_ou} to "%uuid of {_op}%"
+            if {bwx::name::%{_ou}%} is not set:
+                send "&cVon diesem Spieler gibt es keine Daten." to sender
+                stop
+            set {_xp} to bwXp({_ou})
+            send "&6%{bwx::name::%{_ou}%}%&7: Level &6%bwLevelOf({_xp})% &8| &7XP &e%{_xp}% &8| &7Punkte &e%bwPts({_ou})% &8| &7Bank &e%bwBank({_ou})%" to sender
+            stop
+        if sender is not a player:
+            send "&cNutzung: /punkte <spieler>" to sender
+            stop
+        set {_u} to "%uuid of player%"
+        set {_xp} to bwXp({_u})
+        send "&8&m-------&r &6Dein Fortschritt &8&m-------" to player
+        send bwStatusLine(player) to player
+        send "&7Level: &6%bwLevelOf({_xp})% &8| &7Gesamt-XP: &e%{_xp}% &8| &7Punkte: &e%bwPts({_u})% &8| &7Bank: &e%bwBank({_u})% &8| &7Depot: &e%bwStkValue({_u})%" to player
+        send "&7Punkte gibt es für: Runde betreten, Kill, Final Kill, Bett, Sieg." to player
+        send "&7Befehle: &e/pay &8| &e/bank &8| &e/aktien &8| &e/gamble &8| &e/kosmetik &8| &e/chelp" to player
+
+# /pay ersetzt das frühere Schenken
+command /pay <text> <integer>:
+    usage: /pay <Spieler> <Anzahl>
+    trigger:
+        if sender is not a player:
+            send "&cNur für Spieler!" to sender
+            stop
+        set {_t} to arg-1 parsed as player
+        if {_t} is not set:
+            send "&cSpieler &f%arg-1% &cist nicht online." to player
+            stop
+        if {_t} is player:
+            send "&cDu kannst dir selbst keine Punkte überweisen." to player
+            stop
+        if arg-2 < 1:
+            send "&cDie Anzahl muss mindestens 1 sein." to player
+            stop
+        set {_u} to "%uuid of player%"
+        if bwPts({_u}) < arg-2:
+            send "&cDu hast nur &e%bwPts({_u})% &cPunkte." to player
+            stop
+        set {_tu} to "%uuid of {_t}%"
+        set {bwp::pts::%{_u}%} to bwPts({_u}) - arg-2
+        set {bwp::pts::%{_tu}%} to bwPts({_tu}) + arg-2
+        send "&aDu hast &e%arg-2% Punkte &aan &f%name of {_t}% &aüberwiesen. &7Guthaben: &e%bwPts({_u})%" to player
+        send "&a&f%name of player% &ahat dir &e%arg-2% Punkte &aüberwiesen! &7Guthaben: &e%bwPts({_tu})%" to {_t}
+        play sound "entity.player.levelup" with volume 0.6 and pitch 1.6 to {_t}
+
+# =========================================================
+# 7. ADMIN: /resetstats, /game stop, /cancelgame, /setbwlobby
+# =========================================================
+# /resetstats <spieler>                  Punkte, XP/Level und Statistiken (Skript-Leaderboard) eines Spielers
+# /resetstats <spieler> kosmetik         zusätzlich seine gekauften Kosmetika
+# /resetstats all confirm [kosmetik]     das Gleiche für ALLE Spieler (Leaderboard komplett leer)
+# Hinweis: Die internen SBW-Statistiken (/bw stats, SBW-Hologramm) liegen in einer eigenen Datei,
+# die ein Skript nicht löschen kann (siehe README unten in der Antwort).
+function bwResetPlayer(u: text, withcos: boolean):
+    delete {bwp::pts::%{_u}%}
+    delete {bwp::xp::%{_u}%}
+    loop "plays", "won", "lost", "best", "streak", "cbest", "dstreak" and "dlast":
+        delete {bwp::g%loop-value%::%{_u}%}
+    loop "games", "wins", "kills", "finalkills", "deaths" and "beds":
+        delete {bwst::%loop-value%::%{_u}%}
+    if {_withcos} is true:
+        delete {bwc::own::%{_u}%::*}
+        delete {bwc::sel::%{_u}%::*}
+
+command /resetstats <text> [<text>] [<text>]:
+    permission: op
+    usage: /resetstats <spieler> [kosmetik] | /resetstats all confirm [kosmetik]
+    trigger:
+        set {_cos} to false
+        if arg-2 is "kosmetik":
+            set {_cos} to true
+        if arg-3 is "kosmetik":
+            set {_cos} to true
+        if arg-1 is "all":
+            if arg-2 is not "confirm":
+                send "&cACHTUNG: Das setzt Punkte, Level und Statistiken ALLER Spieler zurück!" to sender
+                send "&cZur Bestätigung: &e/resetstats all confirm &7(optional &e/resetstats all confirm kosmetik&7)" to sender
+                stop
+            delete {bwp::pts::*}
+            delete {bwp::xp::*}
+            delete {bwst::*}
+            if {_cos} is true:
+                delete {bwc::*}
+            send "&aAlle Punkte, Level und Statistiken (Leaderboard) wurden zurückgesetzt." to sender
+            stop
+        set {_op} to arg-1 parsed as offlineplayer
+        set {_u} to "%uuid of {_op}%"
+        if {bwx::name::%{_u}%} is not set:
+            send "&cVon diesem Spieler gibt es keine Daten." to sender
+            stop
+        bwResetPlayer({_u}, {_cos})
+        send "&aPunkte, Level und Statistiken von &f%{bwx::name::%{_u}%}% &awurden zurückgesetzt." to sender
+
+# Lobby-Punkt, zu dem Spieler nach /game stop bzw. /spectate leave gebracht werden
+command /setbwlobby:
+    permission: op
+    trigger:
+        if sender is not a player:
+            stop
+        set {bwx::lobbyloc} to location of player
+        send "&aLobby-Punkt gesetzt." to player
+
+# Alle Spieler einer Arena in die Lobby schicken und die Rundendaten löschen
+function bwEvacuate(w: world):
+    loop all players in {_w}:
+        bwSpecStop(loop-player)
+        add loop-player to {_pl::*}
+    loop {_pl::*}:
+        make loop-value execute command "bw leave"
+    wait 1 second
+    loop {_pl::*}:
+        if world of loop-value is {_w}:
+            if {bwx::lobbyloc} is set:
+                teleport loop-value to {bwx::lobbyloc}
+            else:
+                make loop-value execute command "spawn"
+        send "&c&lDas Spiel wurde von einem Admin abgebrochen." to loop-value
+    bwResetWorldData({_w})
+
+command /game [<text>] [<text>]:
+    permission: op
+    usage: /game stop [arena]
+    trigger:
+        if arg-1 is not "stop":
+            send "&cNutzung: /game stop [arena]" to sender
+            stop
+        if arg-2 is set:
+            set {_w} to world arg-2
+        else if sender is a player:
+            set {_w} to world of player
+        if {_w} is not set:
+            send "&cNutze /game stop <arena> (Name der Arena-Welt)." to sender
+            stop
+        if name of {_w} is "{@lobby_world}":
+            send "&cDas ist die Lobby, kein Spiel." to sender
+            stop
+        if size of (all players in {_w}) is 0:
+            send "&cIn dieser Welt ist niemand." to sender
+            stop
+        send "&aSpiel in &f%name of {_w}% &awird abgebrochen ..." to sender
+        bwEvacuate({_w})
+
+command /cancelgame [<text>]:
+    permission: op
+    aliases: stopgame
+    usage: /cancelgame [arena]
+    trigger:
+        if arg-1 is set:
+            set {_w} to world arg-1
+        else if sender is a player:
+            set {_w} to world of player
+        if {_w} is not set:
+            send "&cNutze /cancelgame <arena> (Name der Arena-Welt)." to sender
+            stop
+        if name of {_w} is "{@lobby_world}":
+            send "&cDas ist die Lobby, kein Spiel." to sender
+            stop
+        if size of (all players in {_w}) is 0:
+            send "&cIn dieser Welt ist niemand." to sender
+            stop
+        send "&aSpiel in &f%name of {_w}% &awird abgebrochen ..." to sender
+        bwEvacuate({_w})
+
+# =========================================================
+# 8. KOSMETIK-SHOP: /kosmetik
+# =========================================================
+# Bezahlt wird mit Punkten (nur der Punktestand sinkt, XP/Level bleiben).
+# {bwc::own::<uuid>::<id>} = gekauft, {bwc::sel::<uuid>::<kategorie>} = aktuell ausgewählt
+# Kategorien: arrow (Pfeilspuren), bed (Betten-Explosion), kill (Kill-Effekte)
+# Level-Kosmetika (a_lv5, k_lv10, ...) werden bei Level 5/10/20/30/40/50/75/100 automatisch freigeschaltet.
+# Alle Effekte stehen in den Tabellen unten (Name, Preis, Icon, Partikel).
+#
+# Hinweis: In den Lore-Texten steht absichtlich nie das Wort "Price"/"Quickbuy-Slot",
+# damit die Shop-Handler in Bedwars.sk diese Menüs ignorieren.
+
+function bwCosAll() :: texts:
+    return "a_cloud", "a_crit", "a_flame", "a_villager", "a_heart", "a_note", "a_endrod", "a_soul", "a_firework", "a_snow", "a_enchant", "a_witch", "a_glow", "a_portal", "a_spark", "a_dragon", "a_totem", "a_sculk", "b_flame", "b_hearts", "b_lightning", "b_stars", "b_soul", "b_firework", "b_snow", "b_enchant", "b_witch", "b_glow", "b_portal", "b_spark", "b_dragon", "b_totem", "k_crit", "k_flame", "k_soul", "k_villager", "k_lightning", "k_firework", "k_snow", "k_enchant", "k_witch", "k_glow", "k_portal", "k_spark", "k_dragon", "k_totem", "a_lv5", "k_lv10", "b_lv20", "a_lv30", "k_lv40", "b_lv50", "a_lv75" and "k_lv100"
+
+function bwCosName(id: text) :: text:
+    if {_id} is "a_cloud":
+        return "&fWolkenspur"
+    if {_id} is "a_crit":
+        return "&eKritspur"
+    if {_id} is "a_flame":
+        return "&6Flammenspur"
+    if {_id} is "a_villager":
+        return "&aFunkelspur"
+    if {_id} is "a_heart":
+        return "&dHerzspur"
+    if {_id} is "a_note":
+        return "&bNotenspur"
+    if {_id} is "a_endrod":
+        return "&fSternenstaub"
+    if {_id} is "a_soul":
+        return "&3Seelenspur"
+    if {_id} is "a_firework":
+        return "&cFeuerwerksspur"
+    if {_id} is "a_snow":
+        return "&bSchneespur"
+    if {_id} is "a_enchant":
+        return "&9Zauberspur"
+    if {_id} is "a_witch":
+        return "&5Hexenspur"
+    if {_id} is "a_glow":
+        return "&eLeuchtspur"
+    if {_id} is "a_portal":
+        return "&dPortalspur"
+    if {_id} is "a_spark":
+        return "&bFunkenspur"
+    if {_id} is "a_dragon":
+        return "&5Drachenspur"
+    if {_id} is "a_totem":
+        return "&6Totemspur"
+    if {_id} is "a_sculk":
+        return "&3Sculk-Spur"
+    if {_id} is "b_flame":
+        return "&6Feuersturm"
+    if {_id} is "b_hearts":
+        return "&dHerzregen"
+    if {_id} is "b_lightning":
+        return "&eBlitzschlag"
+    if {_id} is "b_stars":
+        return "&fSternenring"
+    if {_id} is "b_soul":
+        return "&3Seelennebel"
+    if {_id} is "b_firework":
+        return "&cFeuerwerk-Finale"
+    if {_id} is "b_snow":
+        return "&bBlizzard"
+    if {_id} is "b_enchant":
+        return "&9Zauberexplosion"
+    if {_id} is "b_witch":
+        return "&5Hexenkessel"
+    if {_id} is "b_glow":
+        return "&eLichtexplosion"
+    if {_id} is "b_portal":
+        return "&dPortalsturm"
+    if {_id} is "b_spark":
+        return "&bFunkenregen"
+    if {_id} is "b_dragon":
+        return "&5Drachenfeuer"
+    if {_id} is "b_totem":
+        return "&6Totem-Explosion"
+    if {_id} is "k_crit":
+        return "&eKritschlag"
+    if {_id} is "k_flame":
+        return "&6Flammenstoss"
+    if {_id} is "k_soul":
+        return "&3Seelenflug"
+    if {_id} is "k_villager":
+        return "&aFunkelregen"
+    if {_id} is "k_lightning":
+        return "&eBlitz"
+    if {_id} is "k_firework":
+        return "&cFeuerwerksschlag"
+    if {_id} is "k_snow":
+        return "&bEisschlag"
+    if {_id} is "k_enchant":
+        return "&9Zauberschlag"
+    if {_id} is "k_witch":
+        return "&5Hexenfluch"
+    if {_id} is "k_glow":
+        return "&eLichtschlag"
+    if {_id} is "k_portal":
+        return "&dPortalriss"
+    if {_id} is "k_spark":
+        return "&bFunkenschlag"
+    if {_id} is "k_dragon":
+        return "&5Drachenhauch"
+    if {_id} is "k_totem":
+        return "&6Totemschlag"
+    if {_id} is "a_lv5":
+        return "&a&lRookie-Spur"
+    if {_id} is "k_lv10":
+        return "&b&lVeteranen-Schlag"
+    if {_id} is "b_lv20":
+        return "&d&lElite-Explosion"
+    if {_id} is "a_lv30":
+        return "&6&lMeisterspur"
+    if {_id} is "k_lv40":
+        return "&c&lChampion-Schlag"
+    if {_id} is "b_lv50":
+        return "&5&lLegenden-Explosion"
+    if {_id} is "a_lv75":
+        return "&3&lMythenspur"
+    if {_id} is "k_lv100":
+        return "&4&lGötterschlag"
+    return "?"
+
+function bwCosPrice(id: text) :: number:
+    if {_id} is "a_cloud":
+        return 5000
+    if {_id} is "a_crit":
+        return 5500
+    if {_id} is "a_flame":
+        return 6000
+    if {_id} is "a_villager":
+        return 7000
+    if {_id} is "a_heart":
+        return 7500
+    if {_id} is "a_note":
+        return 8000
+    if {_id} is "a_endrod":
+        return 9000
+    if {_id} is "a_soul":
+        return 10000
+    if {_id} is "a_firework":
+        return 11000
+    if {_id} is "a_snow":
+        return 12000
+    if {_id} is "a_enchant":
+        return 13000
+    if {_id} is "a_witch":
+        return 14000
+    if {_id} is "a_glow":
+        return 15000
+    if {_id} is "a_portal":
+        return 16000
+    if {_id} is "a_spark":
+        return 18000
+    if {_id} is "a_dragon":
+        return 20000
+    if {_id} is "a_totem":
+        return 22000
+    if {_id} is "a_sculk":
+        return 25000
+    if {_id} is "b_flame":
+        return 8000
+    if {_id} is "b_hearts":
+        return 9000
+    if {_id} is "b_lightning":
+        return 10000
+    if {_id} is "b_stars":
+        return 11000
+    if {_id} is "b_soul":
+        return 12000
+    if {_id} is "b_firework":
+        return 13000
+    if {_id} is "b_snow":
+        return 14000
+    if {_id} is "b_enchant":
+        return 15000
+    if {_id} is "b_witch":
+        return 16000
+    if {_id} is "b_glow":
+        return 17000
+    if {_id} is "b_portal":
+        return 18000
+    if {_id} is "b_spark":
+        return 20000
+    if {_id} is "b_dragon":
+        return 22000
+    if {_id} is "b_totem":
+        return 25000
+    if {_id} is "k_crit":
+        return 5000
+    if {_id} is "k_flame":
+        return 6000
+    if {_id} is "k_soul":
+        return 7500
+    if {_id} is "k_villager":
+        return 8000
+    if {_id} is "k_lightning":
+        return 10000
+    if {_id} is "k_firework":
+        return 11000
+    if {_id} is "k_snow":
+        return 12000
+    if {_id} is "k_enchant":
+        return 13000
+    if {_id} is "k_witch":
+        return 14000
+    if {_id} is "k_glow":
+        return 15000
+    if {_id} is "k_portal":
+        return 16000
+    if {_id} is "k_spark":
+        return 18000
+    if {_id} is "k_dragon":
+        return 20000
+    if {_id} is "k_totem":
+        return 22000
+    return 999999
+
+function bwCosPart(id: text) :: text:
+    if {_id} is "a_cloud":
+        return "cloud"
+    if {_id} is "a_crit":
+        return "crit"
+    if {_id} is "a_flame":
+        return "flame"
+    if {_id} is "a_villager":
+        return "villager"
+    if {_id} is "a_heart":
+        return "heart"
+    if {_id} is "a_note":
+        return "note"
+    if {_id} is "a_endrod":
+        return "endrod"
+    if {_id} is "a_soul":
+        return "soul"
+    if {_id} is "a_firework":
+        return "firework"
+    if {_id} is "a_snow":
+        return "snow"
+    if {_id} is "a_enchant":
+        return "enchant"
+    if {_id} is "a_witch":
+        return "witch"
+    if {_id} is "a_glow":
+        return "glow"
+    if {_id} is "a_portal":
+        return "portal"
+    if {_id} is "a_spark":
+        return "spark"
+    if {_id} is "a_dragon":
+        return "dragon"
+    if {_id} is "a_totem":
+        return "totem"
+    if {_id} is "a_sculk":
+        return "sculk"
+    if {_id} is "b_flame":
+        return "flame"
+    if {_id} is "b_hearts":
+        return "heart"
+    if {_id} is "b_lightning":
+        return "lightning"
+    if {_id} is "b_stars":
+        return "endrod"
+    if {_id} is "b_soul":
+        return "soul"
+    if {_id} is "b_firework":
+        return "firework"
+    if {_id} is "b_snow":
+        return "snow"
+    if {_id} is "b_enchant":
+        return "enchant"
+    if {_id} is "b_witch":
+        return "witch"
+    if {_id} is "b_glow":
+        return "glow"
+    if {_id} is "b_portal":
+        return "portal"
+    if {_id} is "b_spark":
+        return "spark"
+    if {_id} is "b_dragon":
+        return "dragon"
+    if {_id} is "b_totem":
+        return "totem"
+    if {_id} is "k_crit":
+        return "crit"
+    if {_id} is "k_flame":
+        return "flame"
+    if {_id} is "k_soul":
+        return "soul"
+    if {_id} is "k_villager":
+        return "villager"
+    if {_id} is "k_lightning":
+        return "lightning"
+    if {_id} is "k_firework":
+        return "firework"
+    if {_id} is "k_snow":
+        return "snow"
+    if {_id} is "k_enchant":
+        return "enchant"
+    if {_id} is "k_witch":
+        return "witch"
+    if {_id} is "k_glow":
+        return "glow"
+    if {_id} is "k_portal":
+        return "portal"
+    if {_id} is "k_spark":
+        return "spark"
+    if {_id} is "k_dragon":
+        return "dragon"
+    if {_id} is "k_totem":
+        return "totem"
+    if {_id} is "a_lv5":
+        return "lv5"
+    if {_id} is "k_lv10":
+        return "lv10"
+    if {_id} is "b_lv20":
+        return "lv20"
+    if {_id} is "a_lv30":
+        return "lv30"
+    if {_id} is "k_lv40":
+        return "lv40"
+    if {_id} is "b_lv50":
+        return "lv50"
+    if {_id} is "a_lv75":
+        return "lv75"
+    if {_id} is "k_lv100":
+        return "lv100"
+    return "cloud"
+
+function bwCosIcon(id: text) :: item:
+    if {_id} is "a_cloud":
+        return snowball
+    if {_id} is "a_crit":
+        return flint
+    if {_id} is "a_flame":
+        return blaze powder
+    if {_id} is "a_villager":
+        return emerald
+    if {_id} is "a_heart":
+        return pink dye
+    if {_id} is "a_note":
+        return note block
+    if {_id} is "a_endrod":
+        return end rod
+    if {_id} is "a_soul":
+        return soul torch
+    if {_id} is "a_firework":
+        return firework rocket
+    if {_id} is "a_snow":
+        return blue ice
+    if {_id} is "a_enchant":
+        return enchanted book
+    if {_id} is "a_witch":
+        return fermented spider eye
+    if {_id} is "a_glow":
+        return glow ink sac
+    if {_id} is "a_portal":
+        return obsidian
+    if {_id} is "a_spark":
+        return redstone
+    if {_id} is "a_dragon":
+        return purple dye
+    if {_id} is "a_totem":
+        return totem of undying
+    if {_id} is "a_sculk":
+        return sculk
+    if {_id} is "b_flame":
+        return fire charge
+    if {_id} is "b_hearts":
+        return pink dye
+    if {_id} is "b_lightning":
+        return lightning rod
+    if {_id} is "b_stars":
+        return nether star
+    if {_id} is "b_soul":
+        return soul sand
+    if {_id} is "b_firework":
+        return firework rocket
+    if {_id} is "b_snow":
+        return blue ice
+    if {_id} is "b_enchant":
+        return enchanted book
+    if {_id} is "b_witch":
+        return fermented spider eye
+    if {_id} is "b_glow":
+        return glow ink sac
+    if {_id} is "b_portal":
+        return obsidian
+    if {_id} is "b_spark":
+        return redstone
+    if {_id} is "b_dragon":
+        return purple dye
+    if {_id} is "b_totem":
+        return totem of undying
+    if {_id} is "k_crit":
+        return iron nugget
+    if {_id} is "k_flame":
+        return magma cream
+    if {_id} is "k_soul":
+        return soul lantern
+    if {_id} is "k_villager":
+        return emerald
+    if {_id} is "k_lightning":
+        return lightning rod
+    if {_id} is "k_firework":
+        return firework rocket
+    if {_id} is "k_snow":
+        return blue ice
+    if {_id} is "k_enchant":
+        return enchanted book
+    if {_id} is "k_witch":
+        return fermented spider eye
+    if {_id} is "k_glow":
+        return glow ink sac
+    if {_id} is "k_portal":
+        return obsidian
+    if {_id} is "k_spark":
+        return redstone
+    if {_id} is "k_dragon":
+        return purple dye
+    if {_id} is "k_totem":
+        return totem of undying
+    if {_id} is "a_lv5":
+        return spectral arrow
+    if {_id} is "k_lv10":
+        return iron sword
+    if {_id} is "b_lv20":
+        return tnt
+    if {_id} is "a_lv30":
+        return amethyst shard
+    if {_id} is "k_lv40":
+        return diamond sword
+    if {_id} is "b_lv50":
+        return respawn anchor
+    if {_id} is "a_lv75":
+        return beacon
+    if {_id} is "k_lv100":
+        return netherite sword
+    return barrier
+
+
+function bwCosCat(id: text) :: text:
+    if {_id} starts with "a_":
+        return "arrow"
+    if {_id} starts with "b_":
+        return "bed"
+    return "kill"
+
+function bwCosCatName(c: text) :: text:
+    if {_c} is "arrow":
+        return "Pfeilspuren"
+    if {_c} is "bed":
+        return "Betten-Effekte"
+    return "Kill-Effekte"
+
+# ---------------------------------------------------------
+# LEVEL-KOSMETIK: gibt es nicht zu kaufen, sondern bei einem bestimmten Level geschenkt
+# ---------------------------------------------------------
+# Neue Belohnung: unten in bwCosLevel (Level), bwCosLevelIds (Liste), bwCosAll, bwCosName,
+# bwCosPart, bwCosIcon und in bwPart (Partikel) eintragen. Praefix a_ = Pfeil, b_ = Bett, k_ = Kill.
+function bwCosLevel(id: text) :: number:
+    if {_id} is "a_lv5":
+        return 5
+    if {_id} is "k_lv10":
+        return 10
+    if {_id} is "b_lv20":
+        return 20
+    if {_id} is "a_lv30":
+        return 30
+    if {_id} is "k_lv40":
+        return 40
+    if {_id} is "b_lv50":
+        return 50
+    if {_id} is "a_lv75":
+        return 75
+    if {_id} is "k_lv100":
+        return 100
+    return 0
+
+function bwCosLevelIds() :: texts:
+    return "a_lv5", "k_lv10", "b_lv20", "a_lv30", "k_lv40", "b_lv50", "a_lv75" and "k_lv100"
+
+# Schaltet alle Level-Kosmetika frei, deren Level der Spieler erreicht hat (nimmt nie etwas weg).
+# announce = true: Nachricht + Titel + Sound bei neu freigeschalteten Kosmetika.
+function bwCosSync(p: player, announce: boolean):
+    set {_u} to "%uuid of {_p}%"
+    set {_lv} to bwLevelOf(bwXp({_u}))
+    loop bwCosLevelIds():
+        set {_id} to loop-value
+        if {_lv} >= bwCosLevel({_id}):
+            if {bwc::own::%{_u}%::%{_id}%} is not true:
+                set {bwc::own::%{_u}%::%{_id}%} to true
+                if {_announce} is true:
+                    send "&6&l★ &eNeue Kosmetik freigeschaltet: &r%bwCosName({_id})% &7(Level %bwCosLevel({_id})%) &8- &e/kosmetik" to {_p}
+                    send title "&6&lKOSMETIK FREIGESCHALTET!" with subtitle "%bwCosName({_id})%" to {_p} for 3 seconds
+                    play sound "entity.player.levelup" with volume 1 and pitch 1.2 to {_p}
+
+# Beim Betreten des Servers nachholen (auch fuer Spieler, die schon ein hohes Level haben)
+on join:
+    set {_p} to player
+    wait 3 seconds
+    if {_p} is online:
+        bwCosSync({_p}, true)
+
+function bwCosMenu(p: player):
+    set {_u} to "%uuid of {_p}%"
+    bwCosSync({_p}, false)
+    set {_inv} to chest inventory with 3 rows named "&6&lKosmetik-Shop"
+    loop 27 times:
+        set {_s} to loop-number - 1
+        set slot {_s} of {_inv} to gray stained glass pane named " "
+    set {_x} to arrow named "&6Pfeilspuren"
+    set lore of {_x} to "&7Effekte hinter deinen Pfeilen" and "&eKlicken zum Öffnen" and "&8[cos=menu:arrow]"
+    set slot 11 of {_inv} to {_x}
+    set {_x} to red bed named "&cBetten-Effekte"
+    set lore of {_x} to "&7Explosion, wenn du ein Bett zerstörst" and "&eKlicken zum Öffnen" and "&8[cos=menu:bed]"
+    set slot 13 of {_inv} to {_x}
+    set {_x} to skeleton skull named "&5Kill-Effekte"
+    set lore of {_x} to "&7Effekt, wenn du einen Spieler besiegst" and "&eKlicken zum Öffnen" and "&8[cos=menu:kill]"
+    set slot 15 of {_inv} to {_x}
+    set {_x} to nether star named "&6Dein Guthaben: &e%bwPts({_u})% Punkte"
+    set lore of {_x} to "&7Punkte sammelst du in Runden und im Glücksrad (&e/gamble&7)"
+    set slot 4 of {_inv} to {_x}
+    open {_inv} to {_p}
+
+function bwCosCatMenu(p: player, c: text):
+    set {_u} to "%uuid of {_p}%"
+    set {_inv} to chest inventory with 6 rows named "&6&lKosmetik &8- &7%bwCosCatName({_c})%"
+    loop 54 times:
+        set {_s} to loop-number - 1
+        set slot {_s} of {_inv} to gray stained glass pane named " "
+    set {_n} to 0
+    loop bwCosAll():
+        set {_id} to loop-value
+        if bwCosCat({_id}) is {_c}:
+            set {_x} to bwCosIcon({_id})
+            set name of {_x} to bwCosName({_id})
+            set {_slot} to 10 + mod({_n}, 7) + (9 * floor({_n} / 7))
+            if {bwc::own::%{_u}%::%{_id}%} is true:
+                if {bwc::sel::%{_u}%::%{_c}%} is {_id}:
+                    set lore of {_x} to "&a✔ Ausgewählt" and "&7Klicken zum Abwählen" and "&8[cos=item:%{_id}%]"
+                else:
+                    set lore of {_x} to "&aGekauft" and "&eKlicken zum Auswählen" and "&8[cos=item:%{_id}%]"
+            else if bwCosLevel({_id}) > 0:
+                set lore of {_x} to "&6★ Level-Belohnung" and "&cGesperrt: freigeschaltet ab &6Level %bwCosLevel({_id})%" and "&7Dein Level: &6%bwLevelOf(bwXp({_u}))%" and "&8[cos=item:%{_id}%]"
+            else:
+                set lore of {_x} to "&7Preis: &e%bwCosPrice({_id})% Punkte" and "&eKlicken zum Kaufen" and "&8[cos=item:%{_id}%]"
+            set slot {_slot} of {_inv} to {_x}
+            add 1 to {_n}
+    set {_x} to barrier named "&cKeinen Effekt verwenden"
+    set lore of {_x} to "&7Wählt in dieser Kategorie nichts aus" and "&8[cos=none:%{_c}%]"
+    set slot 48 of {_inv} to {_x}
+    set {_x} to arrow named "&7Zurück"
+    set lore of {_x} to "&8[cos=back]"
+    set slot 50 of {_inv} to {_x}
+    set {_x} to nether star named "&6Guthaben: &e%bwPts({_u})% Punkte"
+    set slot 4 of {_inv} to {_x}
+    open {_inv} to {_p}
+
+function bwCosClick(p: player, id: text):
+    set {_u} to "%uuid of {_p}%"
+    set {_c} to bwCosCat({_id})
+    if {bwc::own::%{_u}%::%{_id}%} is true:
+        if {bwc::sel::%{_u}%::%{_c}%} is {_id}:
+            delete {bwc::sel::%{_u}%::%{_c}%}
+            send "&7Effekt &f%bwCosName({_id})% &7abgewählt." to {_p}
+        else:
+            set {bwc::sel::%{_u}%::%{_c}%} to {_id}
+            send "&aEffekt &f%bwCosName({_id})% &aausgewählt." to {_p}
+    else if bwCosLevel({_id}) > 0:
+        send "&cDiese Kosmetik bekommst du automatisch ab &6Level %bwCosLevel({_id})%&c. &7Dein Level: &6%bwLevelOf(bwXp({_u}))%" to {_p}
+        play sound "entity.villager.no" with volume 1 and pitch 1 to {_p}
+    else:
+        set {_price} to bwCosPrice({_id})
+        if bwPts({_u}) < {_price}:
+            send "&cNicht genug Punkte! Du brauchst &e%{_price}%&c, hast &e%bwPts({_u})%&c." to {_p}
+            play sound "entity.villager.no" with volume 1 and pitch 1 to {_p}
+        else:
+            set {bwp::pts::%{_u}%} to bwPts({_u}) - {_price}
+            set {bwc::own::%{_u}%::%{_id}%} to true
+            set {bwc::sel::%{_u}%::%{_c}%} to {_id}
+            send "&aGekauft und ausgewählt: &f%bwCosName({_id})% &7(-%{_price}% Punkte)" to {_p}
+            play sound "entity.player.levelup" with volume 1 and pitch 1.4 to {_p}
+    wait 1 tick
+    bwCosCatMenu({_p}, {_c})
+
+command /kosmetik:
+    aliases: cosmetics, cosmetic
+    trigger:
+        if sender is not a player:
+            send "&cNur für Spieler!" to sender
+            stop
+        bwCosMenu(player)
+
+on inventory click:
+    set {_t} to "%name of player's current inventory%"
+    if {_t} contains "Kosmetik":
+        cancel event
+        set {_ci} to event-item
+        if {_ci} is not set:
+            stop
+        set {_l} to "%lore of {_ci}%"
+        if {_l} does not contain "[cos=":
+            stop
+        set {_p} to player
+        set {_u} to "%uuid of {_p}%"
+        if {_l} contains "[cos=back]":
+            wait 1 tick
+            bwCosMenu({_p})
+            stop
+        loop "arrow", "bed" and "kill":
+            if {_l} contains "[cos=menu:%loop-value%]":
+                set {_c} to loop-value
+            if {_l} contains "[cos=none:%loop-value%]":
+                set {_c2} to loop-value
+        if {_c} is set:
+            wait 1 tick
+            bwCosCatMenu({_p}, {_c})
+            stop
+        if {_c2} is set:
+            delete {bwc::sel::%{_u}%::%{_c2}%}
+            send "&7Kein Effekt in der Kategorie &f%bwCosCatName({_c2})% &7ausgewählt." to {_p}
+            wait 1 tick
+            bwCosCatMenu({_p}, {_c2})
+            stop
+        loop bwCosAll():
+            if {_l} contains "[cos=item:%loop-value%]":
+                set {_id} to loop-value
+        if {_id} is set:
+            bwCosClick({_p}, {_id})
+
+# --- Pfeilspuren -------------------------------------------------
+# Der Pfeil zieht Partikel hinter sich her, bis er stehen bleibt (max. 5 Sekunden)
+function bwArrowTrail(proj: entity, id: text):
+    set {_k} to bwCosPart({_id})
+    set {_last} to location of {_proj}
+    loop 100 times:
+        if {_proj} is alive:
+            set {_loc} to location of {_proj}
+            bwPart({_k}, {_loc})
+            if distance between {_last} and {_loc} < 0.05:
+                stop
+            set {_last} to {_loc}
+            wait 1 tick
+        else:
+            stop
+
+on shoot:
+    if shooter is a player:
+        set {_id} to {bwc::sel::%uuid of shooter%::arrow}
+        if {_id} is set:
+            bwArrowTrail(projectile, {_id})
+
+# --- Betten-Explosion --------------------------------------------
+# Position des zuletzt abgebauten Bettes merken (SBW gibt sie nicht weiter)
+on break:
+    if "%type of event-block%" does not end with "bed":
+        stop
+    set {-bwx::bedloc::%uuid of player%} to location of event-block
+    set {-bwx::bedtime::%uuid of player%} to now
+
+# Wird von /bwpoints bed ausgelöst (SBW-Reward player-destroy-bed)
+function bwBedEffect(p: player):
+    set {_u} to "%uuid of {_p}%"
+    set {_id} to {bwc::sel::%{_u}%::bed}
+    if {_id} is not set:
+        stop
+    wait 2 ticks
+    set {_l} to location of {_p}
+    if {-bwx::bedloc::%{_u}%} is set:
+        if difference between {-bwx::bedtime::%{_u}%} and now is less than 5 seconds:
+            set {_l} to {-bwx::bedloc::%{_u}%}
+    delete {-bwx::bedloc::%{_u}%}
+    delete {-bwx::bedtime::%{_u}%}
+    bwBurst({_id}, {_l}, 14, 0.3)
+
+# =========================================================
+# 9. CHAT: SLOWMODE + ANTI-SPAM
+# =========================================================
+# - Slowmode: eine Nachricht pro {@chat_seconds} Sekunden (0 = Slowmode aus)
+# - Anti-Spam: Dieselbe Nachricht (Groß/Klein und Leerzeichen egal) darf maximal {@chat_repeat_max}x
+#   HINTEREINANDER gesendet werden. Sobald {@chat_repeat_minutes} Minuten seit der ersten dieser
+#   Nachrichten vergangen sind, ist sie wieder erlaubt. Eine andere Nachricht zwischendurch
+#   setzt den Zähler sofort zurück.
+# - Admins (op) sind ausgenommen. Befehle sind nicht betroffen.
+on chat:
+    if player is op:
+        stop
+    set {_u} to "%uuid of player%"
+    set {_m} to message in lowercase
+    replace all " " with "" in {_m}
+    set {_same} to false
+    if {-bwx::chat::last::%{_u}%} is {_m}:
+        set {_same} to true
+    set {_block} to false
+    if {_same} is true:
+        if difference between {-bwx::chat::first::%{_u}%} and now is less than {@chat_repeat_minutes} minutes:
+            if {-bwx::chat::count::%{_u}%} >= {@chat_repeat_max}:
+                set {_block} to true
+    if {_block} is true:
+        cancel event
+        set {_rem} to {@chat_repeat_minutes} minutes - (difference between {-bwx::chat::first::%{_u}%} and now)
+        send "&cDiese Nachricht hast du schon {@chat_repeat_max}x hintereinander geschrieben. In &e%{_rem}% &cdarfst du sie wieder senden." to player
+        stop
+    if {@chat_seconds} > 0:
+        if {-bwx::chat::time::%{_u}%} is set:
+            set {_w} to difference between {-bwx::chat::time::%{_u}%} and now
+            if {_w} is less than {@chat_seconds} seconds:
+                set {_rem} to {@chat_seconds} seconds - {_w}
+                cancel event
+                send "&cSlowmode: Du kannst erst in &e%{_rem}% &cwieder schreiben." to player
+                stop
+    set {-bwx::chat::time::%{_u}%} to now
+    if {_same} is true:
+        if difference between {-bwx::chat::first::%{_u}%} and now is less than {@chat_repeat_minutes} minutes:
+            add 1 to {-bwx::chat::count::%{_u}%}
+        else:
+            set {-bwx::chat::count::%{_u}%} to 1
+            set {-bwx::chat::first::%{_u}%} to now
+    else:
+        set {-bwx::chat::last::%{_u}%} to {_m}
+        set {-bwx::chat::count::%{_u}%} to 1
+        set {-bwx::chat::first::%{_u}%} to now
+
+on quit:
+    delete {-bwx::chat::last::%uuid of player%}
+    delete {-bwx::chat::count::%uuid of player%}
+    delete {-bwx::chat::first::%uuid of player%}
+    delete {-bwx::chat::time::%uuid of player%}
+
+# =========================================================
+# 10. ACHIEVEMENTS AUS
+# =========================================================
+# Skript hat keinen Advancement-Event. Es gibt zwei Wege (beide nötig für "komplett aus"):
+#  a) Chat-Meldungen: gamerule {@advancement_rule} false. Das wird beim Laden für die Hauptwelt
+#     gesetzt; für jede Arena-Welt/Vorlage einmal /noadvancements ausführen, während man darin steht
+#     (SBW kopiert die Vorlagen-Welt inkl. Gamerule bei jeder Runde).
+#  b) Pop-ups und Fortschritt: in spigot.yml  advancements: disabled: ['*']  (Server neu starten).
+on load:
+    execute console command "gamerule {@advancement_rule} false"
+
+command /noadvancements:
+    permission: op
+    trigger:
+        if sender is not a player:
+            stop
+        make player execute command "gamerule {@advancement_rule} false"
+        send "&aAdvancement-Meldungen in der Welt &f%name of world of player% &aausgeschaltet." to player
+
+# =========================================================
+# 11. VORSCHLÄGE: /vorschlag (Spieler), /vorschlaege (Admins)
+# =========================================================
+# Spieler: /vorschlag <text>  -> ein Vorschlag pro {@suggest_hours} Stunden (10-250 Zeichen)
+# Admins:  /vorschlaege       -> Menü: Linksklick = im Chat lesen + als gelesen markieren,
+#                                Shift-Linksklick = erledigt, Rechtsklick = löschen
+#          /vorschlaege list | lesen <id> | erledigt <id> | loeschen <id> | clear (löscht alle erledigten)
+# Gespeichert wird dauerhaft in {bws::...}. Admins bekommen beim Join einen Hinweis auf neue Vorschläge.
+function bwSugIds() :: texts:
+    set {_n} to 0
+    if {bws::next} is set:
+        set {_n} to {bws::next}
+    while {_n} > 0:
+        if {bws::idx::%{_n}%} is set:
+            add "%{_n}%" to {_out::*}
+        remove 1 from {_n}
+    return {_out::*}
+
+function bwSugNewCount() :: number:
+    set {_c} to 0
+    loop bwSugIds():
+        if {bws::status::%loop-value%} is "neu":
+            add 1 to {_c}
+    return {_c}
+
+function bwSugDelete(id: text):
+    delete {bws::idx::%{_id}%}
+    delete {bws::name::%{_id}%}
+    delete {bws::text::%{_id}%}
+    delete {bws::time::%{_id}%}
+    delete {bws::status::%{_id}%}
+
+function bwSugStatusText(id: text) :: text:
+    if {bws::status::%{_id}%} is "neu":
+        return "&a[NEU]"
+    if {bws::status::%{_id}%} is "erledigt":
+        return "&b[ERLEDIGT]"
+    return "&7[gelesen]"
+
+function bwSugRead(s: player, id: text):
+    if {bws::idx::%{_id}%} is not set:
+        send "&cVorschlag #%{_id}% gibt es nicht." to {_s}
+        stop
+    set {_d} to {bws::time::%{_id}%} formatted as "dd.MM.yyyy HH:mm"
+    send "&8&m-------&r &6Vorschlag #%{_id}% &8&m-------" to {_s}
+    send "&7Von: &f%{bws::name::%{_id}%}% &8| &7%{_d}% &8| %bwSugStatusText({_id})%" to {_s}
+    send "&f%{bws::text::%{_id}%}%" to {_s}
+    if {bws::status::%{_id}%} is "neu":
+        set {bws::status::%{_id}%} to "gelesen"
+
+command /vorschlag <text>:
+    aliases: suggest
+    usage: /vorschlag <text>
+    trigger:
+        if sender is not a player:
+            send "&cNur für Spieler!" to sender
+            stop
+        set {_u} to "%uuid of player%"
+        if player is not op:
+            if {bws::last::%{_u}%} is set:
+                set {_d} to difference between {bws::last::%{_u}%} and now
+                if {_d} is less than {@suggest_hours} hours:
+                    set {_rem} to {@suggest_hours} hours - {_d}
+                    send "&cDu kannst erst in &e%{_rem}% &cwieder einen Vorschlag einreichen." to player
+                    stop
+        set {_t} to arg-1
+        replace all "&" with "" in {_t}
+        if length of {_t} < 10:
+            send "&cBitte schreibe mindestens 10 Zeichen." to player
+            stop
+        if length of {_t} > 250:
+            send "&cMaximal 250 Zeichen, dein Vorschlag hat %length of {_t}%." to player
+            stop
+        add 1 to {bws::next}
+        set {_id} to "%{bws::next}%"
+        set {bws::idx::%{_id}%} to true
+        set {bws::name::%{_id}%} to name of player
+        set {bws::text::%{_id}%} to {_t}
+        set {bws::time::%{_id}%} to now
+        set {bws::status::%{_id}%} to "neu"
+        if player is not op:
+            set {bws::last::%{_u}%} to now
+        send "&aDanke! Dein Vorschlag (#%{_id}%) wurde an die Admins weitergeleitet." to player
+        loop all players:
+            if loop-player is op:
+                send "&e[Vorschlag] &7Neuer Vorschlag #%{_id}% von &f%name of player%&7. Öffnen mit &e/vorschlaege" to loop-player
+
+function bwSugMenu(p: player, page: number):
+    set {_ids::*} to bwSugIds()
+    set {_total} to size of {_ids::*}
+    set {_pages} to ceil({_total} / 45)
+    if {_pages} < 1:
+        set {_pages} to 1
+    if {_page} > {_pages}:
+        set {_page} to {_pages}
+    if {_page} < 1:
+        set {_page} to 1
+    set {-bws::page::%uuid of {_p}%} to {_page}
+    set {_inv} to chest inventory with 6 rows named "&8Vorschläge &7(Seite %{_page}%/%{_pages}%)"
+    set {_start} to (({_page} - 1) * 45) + 1
+    set {_i} to 0
+    while {_i} < 45:
+        set {_k} to {_start} + {_i}
+        if {_k} <= {_total}:
+            set {_id} to {_ids::%{_k}%}
+            set {_st} to {bws::status::%{_id}%}
+            if {_st} is "neu":
+                set {_x} to paper named "&e#%{_id}% &7von &f%{bws::name::%{_id}%}% &a[NEU]"
+            else if {_st} is "erledigt":
+                set {_x} to emerald named "&e#%{_id}% &7von &f%{bws::name::%{_id}%}% &b[ERLEDIGT]"
+            else:
+                set {_x} to book named "&e#%{_id}% &7von &f%{bws::name::%{_id}%}% &7[gelesen]"
+            set {_lore::*} to bwWrap({bws::text::%{_id}%}, 36)
+            set {_d} to {bws::time::%{_id}%} formatted as "dd.MM.yyyy HH:mm"
+            add " " to {_lore::*}
+            add "&7Eingereicht: &f%{_d}%" to {_lore::*}
+            add "&eLinksklick: lesen" to {_lore::*}
+            add "&eShift-Linksklick: erledigt" to {_lore::*}
+            add "&cRechtsklick: löschen" to {_lore::*}
+            add "&8[sug=%{_id}%]" to {_lore::*}
+            set lore of {_x} to {_lore::*}
+            set slot {_i} of {_inv} to {_x}
+            delete {_lore::*}
+        add 1 to {_i}
+    loop 9 times:
+        set {_s} to 44 + loop-number
+        set slot {_s} of {_inv} to gray stained glass pane named " "
+    if {_page} > 1:
+        set {_x} to arrow named "&7Vorherige Seite"
+        set lore of {_x} to "&8[sug=prev]"
+        set slot 45 of {_inv} to {_x}
+    if {_page} < {_pages}:
+        set {_x} to arrow named "&7Nächste Seite"
+        set lore of {_x} to "&8[sug=next]"
+        set slot 53 of {_inv} to {_x}
+    set {_x} to nether star named "&6%{_total}% Vorschläge"
+    set lore of {_x} to "&7Neu: &a%bwSugNewCount()%"
+    set slot 49 of {_inv} to {_x}
+    set {_x} to emerald named "&aErledigte löschen"
+    set lore of {_x} to "&7Löscht alle als erledigt markierten" and "&8[sug=cleardone]"
+    set slot 46 of {_inv} to {_x}
+    set {_x} to clock named "&eCooldowns zurücksetzen"
+    set lore of {_x} to "&7Alle Spieler dürfen sofort wieder einreichen" and "&8[sug=cd]"
+    set slot 47 of {_inv} to {_x}
+    set {_x} to tnt named "&c&lALLE Vorschläge löschen"
+    set lore of {_x} to "&cShift-Linksklick zum Bestätigen" and "&8[sug=reset]"
+    set slot 51 of {_inv} to {_x}
+    open {_inv} to {_p}
+
+command /vorschlaege [<text>] [<text>]:
+    permission: op
+    aliases: vorschläge, suggestions
+    usage: /vorschlaege [list | lesen <id> | erledigt <id> | loeschen <id> | clear | reset confirm | cooldown [spieler]]
+    trigger:
+        if arg-1 is not set:
+            if sender is a player:
+                bwSugMenu(player, 1)
+            else:
+                send "&7Nutze /vorschlaege list" to sender
+            stop
+        if arg-1 is "list":
+            set {_ids::*} to bwSugIds()
+            send "&8&m-------&r &6Vorschläge (%size of {_ids::*}%, neu: %bwSugNewCount()%) &8&m-------" to sender
+            loop {_ids::*}:
+                set {_t} to {bws::text::%loop-value%}
+                if length of {_t} > 60:
+                    set {_t} to "%first 60 characters of {_t}%..."
+                send "&e#%loop-value% %bwSugStatusText(loop-value)% &f%{bws::name::%loop-value%}%&7: %{_t}%" to sender
+            stop
+        if arg-1 is "clear":
+            set {_n} to 0
+            loop bwSugIds():
+                if {bws::status::%loop-value%} is "erledigt":
+                    bwSugDelete(loop-value)
+                    add 1 to {_n}
+            send "&a%{_n}% erledigte Vorschläge gelöscht." to sender
+            stop
+        if arg-1 is "reset":
+            if arg-2 is not "confirm":
+                send "&cACHTUNG: Das löscht ALLE Vorschläge! Bestätigung: &e/vorschlaege reset confirm" to sender
+                stop
+            loop bwSugIds():
+                bwSugDelete(loop-value)
+            delete {bws::next}
+            send "&aAlle Vorschläge wurden zurückgesetzt." to sender
+            stop
+        if arg-1 is "cooldown":
+            if arg-2 is not set:
+                delete {bws::last::*}
+                send "&aAlle Vorschlags-Cooldowns wurden zurückgesetzt." to sender
+                stop
+            set {_o} to arg-2 parsed as offlineplayer
+            delete {bws::last::%uuid of {_o}%}
+            send "&aCooldown von &f%arg-2% &azurückgesetzt." to sender
+            stop
+        if arg-2 is not set:
+            send "&cNutzung: /vorschlaege %arg-1% <id>" to sender
+            stop
+        set {_id} to arg-2
+        if {bws::idx::%{_id}%} is not set:
+            send "&cVorschlag #%{_id}% gibt es nicht." to sender
+            stop
+        if arg-1 is "lesen" or "read":
+            if sender is a player:
+                bwSugRead(player, {_id})
+        else if arg-1 is "erledigt":
+            set {bws::status::%{_id}%} to "erledigt"
+            send "&aVorschlag #%{_id}% ist als erledigt markiert." to sender
+        else if arg-1 is "loeschen" or "delete":
+            bwSugDelete({_id})
+            send "&aVorschlag #%{_id}% gelöscht." to sender
+        else:
+            send "&cNutzung: /vorschlaege [list | lesen <id> | erledigt <id> | loeschen <id> | clear]" to sender
+
+on inventory click:
+    set {_t} to "%name of player's current inventory%"
+    if {_t} contains "Vorschläge":
+        cancel event
+        if player is not op:
+            stop
+        set {_ci} to event-item
+        if {_ci} is not set:
+            stop
+        set {_l} to "%lore of {_ci}%"
+        if {_l} does not contain "[sug=":
+            stop
+        set {_p} to player
+        set {_pg} to {-bws::page::%uuid of {_p}%}
+        if {_pg} is not set:
+            set {_pg} to 1
+        if {_l} contains "[sug=prev]":
+            wait 1 tick
+            bwSugMenu({_p}, {_pg} - 1)
+            stop
+        if {_l} contains "[sug=next]":
+            wait 1 tick
+            bwSugMenu({_p}, {_pg} + 1)
+            stop
+        if {_l} contains "[sug=cleardone]":
+            loop bwSugIds():
+                if {bws::status::%loop-value%} is "erledigt":
+                    bwSugDelete(loop-value)
+            wait 1 tick
+            bwSugMenu({_p}, {_pg})
+            stop
+        if {_l} contains "[sug=cd]":
+            delete {bws::last::*}
+            send "&aAlle Vorschlags-Cooldowns wurden zurückgesetzt." to {_p}
+            stop
+        if {_l} contains "[sug=reset]":
+            if click type is left mouse button with shift:
+                loop bwSugIds():
+                    bwSugDelete(loop-value)
+                delete {bws::next}
+                send "&aAlle Vorschläge wurden zurückgesetzt." to {_p}
+            else:
+                send "&cZum Löschen ALLER Vorschläge: Shift-Linksklick." to {_p}
+            wait 1 tick
+            bwSugMenu({_p}, {_pg})
+            stop
+        loop bwSugIds():
+            if {_l} contains "[sug=%loop-value%]":
+                set {_id} to loop-value
+        if {_id} is not set:
+            stop
+        if click type is left mouse button with shift:
+            set {bws::status::%{_id}%} to "erledigt"
+        else if click type is left mouse button:
+            bwSugRead({_p}, {_id})
+        else if click type is right mouse button or right mouse button with shift:
+            bwSugDelete({_id})
+        wait 1 tick
+        bwSugMenu({_p}, {_pg})
+
+on join:
+    set {_p} to player
+    if {_p} is op:
+        wait 3 seconds
+        set {_n} to bwSugNewCount()
+        if {_n} > 0:
+            send "&e[Vorschlag] &7Es gibt &a%{_n}% neue Vorschläge&7. Öffnen mit &e/vorschlaege" to {_p}
+
+# =========================================================
+# 12. BANK: /bank  (Punkte sicher anlegen, Zinsen)
+# =========================================================
+# {bwp::bank::<uuid>} = Kontostand. Zinsen: {@bank_rate}% pro Stunde, ausgezahlt alle 10 Minuten (auch offline),
+# Kontostand maximal {@bank_max}. Eingezahlte Punkte sind vom Spielstand getrennt und gehen beim Gamblen
+# nicht verloren.
+function bwBank(u: text) :: number:
+    if {bwp::bank::%{_u}%} is not set:
+        return 0
+    return {bwp::bank::%{_u}%}
+
+function bwBankEarned(u: text) :: number:
+    if {bwp::bankint::%{_u}%} is not set:
+        return 0
+    return {bwp::bankint::%{_u}%}
+
+function bwBankDeposit(p: player, amt: number):
+    set {_u} to "%uuid of {_p}%"
+    if {_amt} < 1:
+        send action bar "&cKeine Punkte zum Einzahlen." to {_p}
+        stop
+    if bwPts({_u}) < {_amt}:
+        send action bar "&cNicht genug Punkte! Guthaben: %bwPts({_u})%" to {_p}
+        play sound "entity.villager.no" with volume 1 and pitch 1 to {_p}
+        stop
+    if bwBank({_u}) + {_amt} > {@bank_max}:
+        set {_amt} to {@bank_max} - bwBank({_u})
+        if {_amt} < 1:
+            send action bar "&cDein Konto ist voll (maximal {@bank_max} Punkte)." to {_p}
+            stop
+    set {bwp::pts::%{_u}%} to bwPts({_u}) - {_amt}
+    set {bwp::bank::%{_u}%} to bwBank({_u}) + {_amt}
+    send "&6[Bank] &7Eingezahlt: &e%{_amt}% &8| &7Konto: &e%bwBank({_u})% &8| &7Guthaben: &e%bwPts({_u})%" to {_p}
+    play sound "entity.experience_orb.pickup" with volume 1 and pitch 1 to {_p}
+
+function bwBankWithdraw(p: player, amt: number):
+    set {_u} to "%uuid of {_p}%"
+    if {_amt} < 1:
+        send action bar "&cNichts zum Auszahlen." to {_p}
+        stop
+    if bwBank({_u}) < {_amt}:
+        send action bar "&cSo viel hast du nicht auf dem Konto! Konto: %bwBank({_u})%" to {_p}
+        play sound "entity.villager.no" with volume 1 and pitch 1 to {_p}
+        stop
+    set {bwp::bank::%{_u}%} to bwBank({_u}) - {_amt}
+    set {bwp::pts::%{_u}%} to bwPts({_u}) + {_amt}
+    send "&6[Bank] &7Ausgezahlt: &e%{_amt}% &8| &7Konto: &e%bwBank({_u})% &8| &7Guthaben: &e%bwPts({_u})%" to {_p}
+    play sound "entity.experience_orb.pickup" with volume 1 and pitch 1.3 to {_p}
+
+function bwBankMenu(p: player):
+    set {_u} to "%uuid of {_p}%"
+    set {_inv} to chest inventory with 4 rows named "&6&lBank"
+    loop 36 times:
+        set {_s} to loop-number - 1
+        set slot {_s} of {_inv} to gray stained glass pane named " "
+    set {_x} to gold block named "&6Dein Konto: &e%bwBank({_u})% Punkte"
+    set lore of {_x} to "&7Zinsen: &a{@bank_rate}%%&7 pro Stunde" and "&7Auszahlung alle 10 Minuten, auch offline" and "&7Maximaler Kontostand: &e{@bank_max}" and "&7Bisher verdient: &a+%bwBankEarned({_u})%"
+    set slot 4 of {_inv} to {_x}
+    set {_n} to 0
+    loop 100, 500, 1000 and 5000:
+        set {_sl} to 10 + {_n}
+        set {_x} to lime stained glass pane named "&aEinzahlen: &e%loop-value%"
+        set lore of {_x} to "&7Legt &e%loop-value% Punkte &7auf dein Konto" and "&8[bank=in:%loop-value%]"
+        set slot {_sl} of {_inv} to {_x}
+        set {_sl} to 19 + {_n}
+        set {_x} to orange stained glass pane named "&6Auszahlen: &e%loop-value%"
+        set lore of {_x} to "&7Holt &e%loop-value% Punkte &7vom Konto" and "&8[bank=out:%loop-value%]"
+        set slot {_sl} of {_inv} to {_x}
+        add 1 to {_n}
+    set {_x} to lime concrete named "&a&lAlles einzahlen"
+    set lore of {_x} to "&7Dein ganzes Guthaben (&e%bwPts({_u})%&7)" and "&8[bank=in:all]"
+    set slot 14 of {_inv} to {_x}
+    set {_x} to orange concrete named "&6&lAlles auszahlen"
+    set lore of {_x} to "&7Dein ganzes Konto (&e%bwBank({_u})%&7)" and "&8[bank=out:all]"
+    set slot 23 of {_inv} to {_x}
+    set {_x} to nether star named "&6Guthaben: &e%bwPts({_u})% Punkte"
+    set slot 31 of {_inv} to {_x}
+    set {_x} to emerald named "&2Zur Börse"
+    set lore of {_x} to "&7Aktien kaufen und verkaufen" and "&8[bank=stocks]"
+    set slot 33 of {_inv} to {_x}
+    open {_inv} to {_p}
+
+command /bank [<text>] [<text>]:
+    aliases: konto
+    usage: /bank [einzahlen <anzahl|alles> | auszahlen <anzahl|alles>]
+    trigger:
+        if sender is not a player:
+            send "&cNur für Spieler!" to sender
+            stop
+        if bwIsArena(world of player) is true:
+            send "&cIn Arena-Welten ist die Bank nicht erreichbar. Geh zurück in die Lobby!" to player
+            stop
+        set {_u} to "%uuid of player%"
+        if arg-1 is not set:
+            bwBankMenu(player)
+            stop
+        if arg-1 is "einzahlen" or "deposit" or "auszahlen" or "withdraw":
+            if arg-2 is not set:
+                send "&cNutzung: /bank %arg-1% <anzahl|alles>" to player
+                stop
+            set {_n} to 0
+            if arg-2 is "alles" or "all":
+                if arg-1 is "einzahlen" or "deposit":
+                    set {_n} to bwPts({_u})
+                else:
+                    set {_n} to bwBank({_u})
+            else:
+                set {_n} to arg-2 parsed as integer
+            if {_n} is not set:
+                send "&cBitte gib eine ganze Zahl oder &ealles &can." to player
+                stop
+            if arg-1 is "einzahlen" or "deposit":
+                bwBankDeposit(player, {_n})
+            else:
+                bwBankWithdraw(player, {_n})
+            stop
+        send "&6[Bank] &7Konto: &e%bwBank({_u})% &8| &7Guthaben: &e%bwPts({_u})% &8| &7Zinsen: &a{@bank_rate}%%&7/Stunde" to player
+        send "&7Nutzung: &e/bank &8| &e/bank einzahlen <anzahl|alles> &8| &e/bank auszahlen <anzahl|alles>" to player
+
+on inventory click:
+    set {_t} to "%name of player's current inventory%"
+    if {_t} contains "Bank":
+        cancel event
+        set {_ci} to event-item
+        if {_ci} is not set:
+            stop
+        set {_l} to "%lore of {_ci}%"
+        if {_l} does not contain "[bank=":
+            stop
+        set {_p} to player
+        set {_u} to "%uuid of {_p}%"
+        wait 1 tick
+        if {_l} contains "[bank=stocks]":
+            bwStkMenu({_p})
+            stop
+        if {_l} contains "[bank=in:all]":
+            bwBankDeposit({_p}, bwPts({_u}))
+        else if {_l} contains "[bank=out:all]":
+            bwBankWithdraw({_p}, bwBank({_u}))
+        else:
+            loop 100, 500, 1000 and 5000:
+                if {_l} contains "[bank=in:%loop-value%]":
+                    bwBankDeposit({_p}, loop-value)
+                if {_l} contains "[bank=out:%loop-value%]":
+                    bwBankWithdraw({_p}, loop-value)
+        bwBankMenu({_p})
+
+# Zinsen: alle 10 Minuten (Prozent pro Stunde / 6), Nachkommastellen werden mitgeführt
+every 10 minutes:
+    loop {bwp::bank::*}:
+        set {_u} to loop-index
+        set {_bal} to loop-value
+        if {_bal} > 0:
+            set {_car} to {bwp::bankcarry::%{_u}%}
+            if {_car} is not set:
+                set {_car} to 0
+            set {_acc} to ({_bal} * {@bank_rate} / 600) + {_car}
+            set {_i} to floor({_acc})
+            set {bwp::bankcarry::%{_u}%} to {_acc} - {_i}
+            if {_i} > 0:
+                add {_i} to {bwp::bank::%{_u}%}
+                add {_i} to {bwp::bankint::%{_u}%}
+
+# =========================================================
+# 13. AKTIEN-BÖRSE: /aktien  (virtuelle Börse, Kurse schwanken jede Minute)
+# =========================================================
+# 6 Aktien. Alle 60 Sekunden ändert sich jeder Kurs zufällig (innerhalb der Schwankung der Aktie) und wird
+# sanft zum Basiskurs zurückgezogen (Kurse laufen nicht ins Unendliche). Kauf/Verkauf kostet {@stock_fee}% Gebühr.
+# Die Kurse laufen auch weiter, wenn niemand online ist.
+# {bwm::price::<id>} aktueller Kurs, {bwm::prev::<id>} Kurs der Vorminute,
+# {bwm::own::<uuid>::<id>} Anzahl Aktien, {bwm::cost::<uuid>::<id>} Einstandswert.
+function bwStkIds() :: texts:
+    return "IRON", "GOLD", "EMER", "DIAM", "TNT" and "BEDX"
+
+function bwStkName(id: text) :: text:
+    if {_id} is "IRON":
+        return "&fIron Industries"
+    if {_id} is "GOLD":
+        return "&6Gold Rush AG"
+    if {_id} is "EMER":
+        return "&aEmerald Corp"
+    if {_id} is "DIAM":
+        return "&bDiamond Holding"
+    if {_id} is "TNT":
+        return "&cBoom & Co"
+    return "&dBedwars Entertainment"
+
+function bwStkBase(id: text) :: number:
+    if {_id} is "IRON":
+        return 100
+    if {_id} is "GOLD":
+        return 250
+    if {_id} is "EMER":
+        return 600
+    if {_id} is "DIAM":
+        return 1500
+    if {_id} is "TNT":
+        return 400
+    return 3000
+
+# maximale Schwankung pro Minute in Prozent
+function bwStkVol(id: text) :: number:
+    if {_id} is "IRON":
+        return 2
+    if {_id} is "GOLD":
+        return 3
+    if {_id} is "EMER":
+        return 4
+    if {_id} is "DIAM":
+        return 5
+    if {_id} is "TNT":
+        return 7
+    return 4
+
+function bwStkIcon(id: text) :: item:
+    if {_id} is "IRON":
+        return iron ingot
+    if {_id} is "GOLD":
+        return gold ingot
+    if {_id} is "EMER":
+        return emerald
+    if {_id} is "DIAM":
+        return diamond
+    if {_id} is "TNT":
+        return tnt
+    return red bed
+
+function bwStkPrice(id: text) :: number:
+    if {bwm::price::%{_id}%} is not set:
+        set {bwm::price::%{_id}%} to bwStkBase({_id})
+    return {bwm::price::%{_id}%}
+
+function bwStkOwn(u: text, id: text) :: number:
+    if {bwm::own::%{_u}%::%{_id}%} is not set:
+        return 0
+    return {bwm::own::%{_u}%::%{_id}%}
+
+# Wert aller Aktien eines Spielers
+function bwStkValue(u: text) :: number:
+    set {_v} to 0
+    loop bwStkIds():
+        add bwStkOwn({_u}, loop-value) * bwStkPrice(loop-value) to {_v}
+    return {_v}
+
+# Kursänderung seit der Vorminute (Text mit Pfeil)
+function bwStkTrend(id: text) :: text:
+    set {_now} to bwStkPrice({_id})
+    set {_old} to {bwm::prev::%{_id}%}
+    if {_old} is not set:
+        return "&7■ 0%%"
+    set {_ch} to round((({_now} - {_old}) / {_old}) * 1000) / 10
+    if {_ch} > 0:
+        return "&a▲ +%{_ch}%%%"
+    if {_ch} < 0:
+        return "&c▼ %{_ch}%%%"
+    return "&7■ 0%%"
+
+function bwStkTick():
+    loop bwStkIds():
+        set {_id} to loop-value
+        set {_old} to bwStkPrice({_id})
+        set {_base} to bwStkBase({_id})
+        set {_vol} to bwStkVol({_id})
+        set {_chg} to a random number between (0 - {_vol}) and {_vol}
+        set {_pull} to (({_base} - {_old}) / {_base}) * 4
+        set {_new} to round({_old} * (1 + (({_chg} + {_pull}) / 100)))
+        if {_new} < 1:
+            set {_new} to 1
+        set {bwm::prev::%{_id}%} to {_old}
+        set {bwm::price::%{_id}%} to {_new}
+
+every 1 minute:
+    bwStkTick()
+
+function bwStkBuy(p: player, id: text, qty: number):
+    set {_u} to "%uuid of {_p}%"
+    set {_price} to bwStkPrice({_id})
+    set {_cost} to ceil({_price} * {_qty} * (100 + {@stock_fee}) / 100)
+    if bwPts({_u}) < {_cost}:
+        send action bar "&cNicht genug Punkte! Du brauchst %{_cost}% (inkl. Gebühr)." to {_p}
+        play sound "entity.villager.no" with volume 1 and pitch 1 to {_p}
+        stop
+    set {bwp::pts::%{_u}%} to bwPts({_u}) - {_cost}
+    set {bwm::own::%{_u}%::%{_id}%} to bwStkOwn({_u}, {_id}) + {_qty}
+    add {_price} * {_qty} to {bwm::cost::%{_u}%::%{_id}%}
+    send "&2[Börse] &7Gekauft: &f%{_qty}%x %bwStkName({_id})% &7zu &e%{_price}% &8| &7Kosten: &e%{_cost}% &8| &7Guthaben: &e%bwPts({_u})%" to {_p}
+    play sound "entity.item.pickup" with volume 1 and pitch 1.2 to {_p}
+
+function bwStkSell(p: player, id: text, qty: number):
+    set {_u} to "%uuid of {_p}%"
+    set {_have} to bwStkOwn({_u}, {_id})
+    if {_have} < 1:
+        send action bar "&cDu besitzt keine Aktien von %bwStkName({_id})%." to {_p}
+        play sound "entity.villager.no" with volume 1 and pitch 1 to {_p}
+        stop
+    if {_qty} > {_have}:
+        set {_qty} to {_have}
+    set {_price} to bwStkPrice({_id})
+    set {_gain} to floor({_price} * {_qty} * (100 - {@stock_fee}) / 100)
+    set {_cost} to {bwm::cost::%{_u}%::%{_id}%}
+    if {_cost} is not set:
+        set {_cost} to 0
+    set {_part} to floor({_cost} * {_qty} / {_have})
+    set {bwp::pts::%{_u}%} to bwPts({_u}) + {_gain}
+    set {bwm::own::%{_u}%::%{_id}%} to {_have} - {_qty}
+    set {bwm::cost::%{_u}%::%{_id}%} to {_cost} - {_part}
+    if {_have} - {_qty} < 1:
+        delete {bwm::own::%{_u}%::%{_id}%}
+        delete {bwm::cost::%{_u}%::%{_id}%}
+    set {_pl} to {_gain} - {_part}
+    if {_pl} >= 0:
+        send "&2[Börse] &7Verkauft: &f%{_qty}%x %bwStkName({_id})% &7zu &e%{_price}% &8| &7Erlös: &e%{_gain}% &8| &aGewinn: +%{_pl}%" to {_p}
+    else:
+        send "&2[Börse] &7Verkauft: &f%{_qty}%x %bwStkName({_id})% &7zu &e%{_price}% &8| &7Erlös: &e%{_gain}% &8| &cVerlust: %{_pl}%" to {_p}
+    play sound "entity.experience_orb.pickup" with volume 1 and pitch 1.2 to {_p}
+
+function bwStkMenu(p: player):
+    set {_u} to "%uuid of {_p}%"
+    set {_inv} to chest inventory with 4 rows named "&2&lBörse"
+    loop 36 times:
+        set {_s} to loop-number - 1
+        set slot {_s} of {_inv} to gray stained glass pane named " "
+    set {_n} to 10
+    loop bwStkIds():
+        set {_id} to loop-value
+        set {_pr} to bwStkPrice({_id})
+        set {_have} to bwStkOwn({_u}, {_id})
+        set {_x} to bwStkIcon({_id})
+        set name of {_x} to "%bwStkName({_id})% &8(%{_id}%)"
+        add "&7Kurs: &e%{_pr}% Punkte &8| %bwStkTrend({_id})%" to {_lore::*}
+        add "&7Besitz: &f%{_have}% Aktien &8(Wert &e%{_have} * {_pr}%&8)" to {_lore::*}
+        if {_have} > 0:
+            set {_cost} to {bwm::cost::%{_u}%::%{_id}%}
+            if {_cost} is not set:
+                set {_cost} to 0
+            set {_pl} to ({_have} * {_pr}) - {_cost}
+            if {_pl} >= 0:
+                add "&7Gewinn/Verlust: &a+%{_pl}%" to {_lore::*}
+            else:
+                add "&7Gewinn/Verlust: &c%{_pl}%" to {_lore::*}
+        add " " to {_lore::*}
+        add "&aLinksklick: 1 kaufen" to {_lore::*}
+        add "&aShift-Linksklick: 10 kaufen" to {_lore::*}
+        add "&cRechtsklick: 1 verkaufen" to {_lore::*}
+        add "&cShift-Rechtsklick: 10 verkaufen" to {_lore::*}
+        add "&8[stk=%{_id}%]" to {_lore::*}
+        set lore of {_x} to {_lore::*}
+        delete {_lore::*}
+        set slot {_n} of {_inv} to {_x}
+        add 1 to {_n}
+    set {_x} to book named "&6Dein Depot: &e%bwStkValue({_u})% Punkte"
+    set lore of {_x} to "&7Guthaben: &e%bwPts({_u})% Punkte" and "&7Gebühr pro Handel: &c{@stock_fee}%%" and "&7Kurse ändern sich jede Minute"
+    set slot 4 of {_inv} to {_x}
+    set {_x} to barrel named "&cAlles verkaufen"
+    set lore of {_x} to "&7Verkauft alle deine Aktien zum aktuellen Kurs" and "&8[stk=sellall]"
+    set slot 29 of {_inv} to {_x}
+    set {_x} to nether star named "&6Guthaben: &e%bwPts({_u})% Punkte"
+    set slot 31 of {_inv} to {_x}
+    set {_x} to gold block named "&6Zur Bank"
+    set lore of {_x} to "&7Punkte anlegen und Zinsen kassieren" and "&8[stk=bank]"
+    set slot 33 of {_inv} to {_x}
+    open {_inv} to {_p}
+
+command /aktien:
+    aliases: boerse, stocks, aktie
+    trigger:
+        if sender is not a player:
+            send "&cNur für Spieler!" to sender
+            stop
+        if bwIsArena(world of player) is true:
+            send "&cIn Arena-Welten ist die Börse geschlossen. Geh zurück in die Lobby!" to player
+            stop
+        bwStkMenu(player)
+
+on inventory click:
+    set {_t} to "%name of player's current inventory%"
+    if {_t} contains "Börse":
+        cancel event
+        set {_ci} to event-item
+        if {_ci} is not set:
+            stop
+        set {_l} to "%lore of {_ci}%"
+        if {_l} does not contain "[stk=":
+            stop
+        set {_p} to player
+        set {_u} to "%uuid of {_p}%"
+        wait 1 tick
+        if {_l} contains "[stk=bank]":
+            bwBankMenu({_p})
+            stop
+        if {_l} contains "[stk=sellall]":
+            loop bwStkIds():
+                if bwStkOwn({_u}, loop-value) > 0:
+                    bwStkSell({_p}, loop-value, bwStkOwn({_u}, loop-value))
+            bwStkMenu({_p})
+            stop
+        loop bwStkIds():
+            if {_l} contains "[stk=%loop-value%]":
+                set {_id} to loop-value
+        if {_id} is not set:
+            stop
+        if click type is left mouse button:
+            bwStkBuy({_p}, {_id}, 1)
+        else if click type is left mouse button with shift:
+            bwStkBuy({_p}, {_id}, 10)
+        else if click type is right mouse button:
+            bwStkSell({_p}, {_id}, 1)
+        else if click type is right mouse button with shift:
+            bwStkSell({_p}, {_id}, 10)
+        bwStkMenu({_p})
+
+# =========================================================
+# 14. JUMP & RUN (Pale Oak Druckplatten)
+# =========================================================
+# Wer auf eine Pale-Oak-Druckplatte tritt, startet das Jump & Run. Jede weitere Pale-Oak-Druckplatte
+# ist automatisch ein Checkpoint. Fällst du tief, geht es zum letzten Checkpoint zurück.
+# Ziel (optional, Admin): /jumprun setfinish  (auf der Ziel-Platte stehen). Wer sie im Jump & Run betritt,
+# bekommt {@jr_reward} Punkte (alle {@jr_cooldown_minutes} Minuten, die Bestzeit wird immer gespeichert).
+# Läuft nur ausserhalb von Arena-Welten. /jumprun stop beendet, /jumprun cp bringt dich zum Checkpoint.
+# Kurzbefehl /jn: Jeder Checkpoint hat eine feste Nummer (1, 2, 3 ... in der Reihenfolge des Erreichens).
+#   /jn checkpoint <Nummer> = dorthin, /jn checkpoint start = zum Start, /jn checkpoint = aktueller, /jn list.
+#   Dieselbe Platte bekommt nie eine zweite Nummer. Wer zu Checkpoint 2 geht, wird bei einem Sturz auch dorthin gesetzt.
+# Die 3 Jump-&-Run-Items liegen in den Hotbar-Slots 3, 4 und 5. Vorherige Items dieser Slots werden gemerkt.
+function bwJrGive(p: player):
+    set {_u} to "%uuid of {_p}%"
+    if {bwx::jr::saved::%{_u}%} is not set:
+        set {bwx::jr::saved::%{_u}%} to true
+        loop 3 times:
+            set {_s} to loop-number + 2
+            delete {bwx::jr::item::%{_u}%::%{_s}%}
+            if slot {_s} of {_p}'s inventory is not air:
+                set {bwx::jr::item::%{_u}%::%{_s}%} to slot {_s} of {_p}'s inventory
+    set slot 3 of {_p}'s inventory to red bed named "&a&l[JR] Zum Checkpoint"
+    set slot 4 of {_p}'s inventory to clock named "&e&l[JR] Neustart"
+    set slot 5 of {_p}'s inventory to barrier named "&c&l[JR] Verlassen"
+
+function bwJrRestore(p: player):
+    set {_u} to "%uuid of {_p}%"
+    loop all items in {_p}'s inventory:
+        if "%name of loop-item%" contains "[JR]":
+            remove loop-item from {_p}'s inventory
+    if {bwx::jr::saved::%{_u}%} is set:
+        loop 3 times:
+            set {_s} to loop-number + 2
+            if {bwx::jr::item::%{_u}%::%{_s}%} is set:
+                set slot {_s} of {_p}'s inventory to {bwx::jr::item::%{_u}%::%{_s}%}
+        delete {bwx::jr::saved::%{_u}%}
+        delete {bwx::jr::item::%{_u}%::*}
+
+# Zurück an den Start: Checkpoints und Zeit werden zurückgesetzt
+function bwJrReset(p: player):
+    set {_u} to "%uuid of {_p}%"
+    if {-bwx::jr::startloc::%{_u}%} is not set:
+        stop
+    set {_sl} to {-bwx::jr::startloc::%{_u}%}
+    teleport {_p} to {_sl}
+    set fall distance of {_p} to 0
+    delete {-bwx::jr::seen::%{_u}%::*}
+    delete {-bwx::jr::loc::%{_u}%::*}
+    set {-bwx::jr::seen::%{_u}%::%{-bwx::jr::startkey::%{_u}%}%} to 0
+    set {-bwx::jr::loc::%{_u}%::0} to {_sl}
+    set {-bwx::jr::cur::%{_u}%} to 0
+    set {-bwx::jr::cp::%{_u}%} to {_sl}
+    set {-bwx::jr::n::%{_u}%} to 0
+    set {-bwx::jr::falls::%{_u}%} to 0
+    set {-bwx::jr::start::%{_u}%} to now
+    send action bar "&e&lJump & Run neu gestartet" to {_p}
+    play sound "entity.enderman.teleport" with volume 0.6 and pitch 1.2 to {_p}
+
+function bwJrStop(p: player):
+    set {_u} to "%uuid of {_p}%"
+    bwJrRestore({_p})
+    delete {-bwx::jr::seen::%{_u}%::*}
+    delete {-bwx::jr::loc::%{_u}%::*}
+    delete {-bwx::jr::cur::%{_u}%}
+    delete {-bwx::jr::startloc::%{_u}%}
+    delete {-bwx::jr::startkey::%{_u}%}
+    delete {-bwx::jr::active::%{_u}%}
+    delete {-bwx::jr::cp::%{_u}%}
+    delete {-bwx::jr::n::%{_u}%}
+    delete {-bwx::jr::start::%{_u}%}
+    delete {-bwx::jr::plate::%{_u}%}
+    delete {-bwx::jr::falls::%{_u}%}
+
+# Zu Checkpoint Nummer {_n} teleportieren (0 = Start). Danach ist dieser Checkpoint der aktive
+# (dorthin geht es auch, wenn man faellt). Die Nummer einer Platte bleibt fuer die ganze Runde gleich.
+function bwJrGoto(p: player, n: number):
+    set {_u} to "%uuid of {_p}%"
+    if {-bwx::jr::active::%{_u}%} is not true:
+        send "&cDu bist in keinem Jump & Run." to {_p}
+        stop
+    set {_max} to {-bwx::jr::n::%{_u}%}
+    if {-bwx::jr::loc::%{_u}%::%{_n}%} is not set:
+        if {_max} is 0:
+            send "&cDu hast noch keinen Checkpoint erreicht. Tritt auf weitere Pale-Oak-Platten." to {_p}
+        else:
+            send "&cCheckpoint %{_n}% hast du noch nicht erreicht. Du hast die Checkpoints &f1 bis %{_max}%&c." to {_p}
+        stop
+    set {_loc} to {-bwx::jr::loc::%{_u}%::%{_n}%}
+    teleport {_p} to {_loc}
+    set fall distance of {_p} to 0
+    set {-bwx::jr::cp::%{_u}%} to {_loc}
+    set {-bwx::jr::cur::%{_u}%} to {_n}
+    if {_n} is 0:
+        send action bar "&aZurück zum Start." to {_p}
+    else:
+        send action bar "&aZurück zu Checkpoint %{_n}%." to {_p}
+    play sound "entity.enderman.teleport" with volume 0.6 and pitch 1.2 to {_p}
+
+function bwJrFinish(p: player, u: text):
+    set {_t} to difference between {-bwx::jr::start::%{_u}%} and now
+    set {_f} to {-bwx::jr::falls::%{_u}%}
+    if {_f} is not set:
+        set {_f} to 0
+    bwJrStop({_p})
+    send title "&a&lGESCHAFFT!" with subtitle "&7Zeit: &e%{_t}% &8| &7Stürze: &e%{_f}%" to {_p} for 4 seconds
+    play sound "entity.player.levelup" with volume 1 and pitch 1 to {_p}
+    if {bwx::jr::best::%{_u}%} is not set:
+        set {bwx::jr::best::%{_u}%} to {_t}
+        send "&6[Jump & Run] &7Neue Bestzeit: &e%{_t}%" to {_p}
+    else if {_t} < {bwx::jr::best::%{_u}%}:
+        set {bwx::jr::best::%{_u}%} to {_t}
+        send "&6[Jump & Run] &aNeue Bestzeit: &e%{_t}%" to {_p}
+    set {_ok} to true
+    if {bwx::jr::last::%{_u}%} is set:
+        if difference between {bwx::jr::last::%{_u}%} and now is less than {@jr_cooldown_minutes} minutes:
+            set {_ok} to false
+    if {_ok} is true:
+        set {bwp::pts::%{_u}%} to bwPts({_u}) + {@jr_reward}
+        set {bwx::jr::last::%{_u}%} to now
+        send "&6[Jump & Run] &7Belohnung: &e+{@jr_reward} Punkte" to {_p}
+    else:
+        send "&6[Jump & Run] &7Eine Belohnung gibt es nur alle {@jr_cooldown_minutes} Minuten." to {_p}
+
+on step on pale oak pressure plate:
+    set {_p} to player
+    if bwIsArena(world of {_p}) is true:
+        stop
+    if gamemode of {_p} is spectator:
+        stop
+    set {_u} to "%uuid of {_p}%"
+    set {_l} to location of (block at (location of {_p}))
+    set {_key} to "%{_l}%"
+    set {_cp} to {_l} offset by vector(0.5, 0.2, 0.5)
+    set yaw of {_cp} to yaw of {_p}
+    set pitch of {_cp} to 0
+    if {-bwx::jr::active::%{_u}%} is true:
+        if {bwx::jrfinish::%name of world of {_p}%} is {_l}:
+            bwJrFinish({_p}, {_u})
+            stop
+        # Schon bekannte Platte: sie behaelt ihre Nummer (wird NIE doppelt gezaehlt) und ist wieder der aktive Checkpoint
+        if {-bwx::jr::seen::%{_u}%::%{_key}%} is set:
+            set {_k} to {-bwx::jr::seen::%{_u}%::%{_key}%}
+            if {-bwx::jr::loc::%{_u}%::%{_k}%} is set:
+                if {-bwx::jr::cur::%{_u}%} is not {_k}:
+                    set {-bwx::jr::cur::%{_u}%} to {_k}
+                    set {-bwx::jr::cp::%{_u}%} to {-bwx::jr::loc::%{_u}%::%{_k}%}
+                    if {_k} is 0:
+                        send action bar "&aStart &7ist wieder aktiv" to {_p}
+                    else:
+                        send action bar "&aCheckpoint %{_k}% &7ist wieder aktiv" to {_p}
+                    play sound "block.note_block.chime" with volume 1 and pitch 1.2 to {_p}
+            stop
+        # Neue Platte = naechster Checkpoint mit der naechsten freien Nummer
+        set {_k} to {-bwx::jr::n::%{_u}%} + 1
+        set {-bwx::jr::n::%{_u}%} to {_k}
+        set {-bwx::jr::seen::%{_u}%::%{_key}%} to {_k}
+        set {-bwx::jr::loc::%{_u}%::%{_k}%} to {_cp}
+        set {-bwx::jr::cur::%{_u}%} to {_k}
+        set {-bwx::jr::plate::%{_u}%} to {_l}
+        set {-bwx::jr::cp::%{_u}%} to {_cp}
+        send action bar "&a&lCheckpoint %{_k}% &7gespeichert" to {_p}
+        play sound "block.note_block.chime" with volume 1 and pitch 1.5 to {_p}
+        stop
+    if {bwx::jrfinish::%name of world of {_p}%} is {_l}:
+        send action bar "&cDas ist das Ziel! Starte das Jump & Run an einer anderen Platte." to {_p}
+        stop
+    set {-bwx::jr::active::%{_u}%} to true
+    set {-bwx::jr::plate::%{_u}%} to {_l}
+    set {-bwx::jr::cp::%{_u}%} to {_cp}
+    set {-bwx::jr::n::%{_u}%} to 0
+    set {-bwx::jr::falls::%{_u}%} to 0
+    set {-bwx::jr::start::%{_u}%} to now
+    delete {-bwx::jr::seen::%{_u}%::*}
+    delete {-bwx::jr::loc::%{_u}%::*}
+    set {-bwx::jr::seen::%{_u}%::%{_key}%} to 0
+    set {-bwx::jr::loc::%{_u}%::0} to {_cp}
+    set {-bwx::jr::cur::%{_u}%} to 0
+    set {-bwx::jr::startloc::%{_u}%} to {_cp}
+    set {-bwx::jr::startkey::%{_u}%} to {_key}
+    bwJrGive({_p})
+    send title "&6&lJUMP & RUN" with subtitle "&7Gestartet! Jede Platte ist ein nummerierter Checkpoint." to {_p} for 3 seconds
+    send "&6[Jump & Run] &7Jede weitere &fPale-Oak-Druckplatte &7ist ein Checkpoint (1, 2, 3 ...). Zurück: &e/jn checkpoint <Nummer> &7| Beenden: &e/jn stop" to {_p}
+    play sound "entity.experience_orb.pickup" with volume 1 and pitch 1.2 to {_p}
+
+every 2 ticks:
+    loop all players:
+        set {_u} to "%uuid of loop-player%"
+        if {-bwx::jr::active::%{_u}%} is true:
+            set {_cp} to {-bwx::jr::cp::%{_u}%}
+            if world of loop-player is not world of {_cp}:
+                bwJrStop(loop-player)
+            else if y-coordinate of (location of loop-player) < (y-coordinate of {_cp}) - {@jr_fall_depth}:
+                teleport loop-player to {_cp}
+                set fall distance of loop-player to 0
+                add 1 to {-bwx::jr::falls::%{_u}%}
+                send action bar "&cGefallen! &7Zurück zum Checkpoint." to loop-player
+                play sound "entity.enderman.teleport" with volume 0.6 and pitch 1.2 to loop-player
+
+on quit:
+    bwJrStop(player)
+
+on world change:
+    bwJrStop(player)
+
+command /jumprun [<text>] [<text>]:
+    aliases: jr, jn
+    usage: /jn [checkpoint <Nummer> | list | stop | setfinish | delfinish]
+    trigger:
+        if sender is not a player:
+            send "&cNur für Spieler!" to sender
+            stop
+        set {_u} to "%uuid of player%"
+        if arg-1 is "stop" or "leave":
+            if {-bwx::jr::active::%{_u}%} is true:
+                bwJrStop(player)
+                send "&6[Jump & Run] &7Beendet." to player
+            else:
+                send "&cDu bist in keinem Jump & Run." to player
+            stop
+        if arg-1 is "cp" or "checkpoint":
+            if {-bwx::jr::active::%{_u}%} is not true:
+                send "&cDu bist in keinem Jump & Run." to player
+                stop
+            # Ohne Nummer: zum aktuellen Checkpoint. "start" oder 0: zum Startpunkt
+            if arg-2 is not set:
+                bwJrGoto(player, {-bwx::jr::cur::%{_u}%})
+                stop
+            if arg-2 is "start":
+                bwJrGoto(player, 0)
+                stop
+            set {_num} to arg-2 parsed as integer
+            if {_num} is not set:
+                send "&cNutzung: /jn checkpoint <Nummer> &7(oder &fstart&7)" to player
+                stop
+            bwJrGoto(player, {_num})
+            stop
+        if arg-1 is "list" or "liste":
+            if {-bwx::jr::active::%{_u}%} is not true:
+                send "&cDu bist in keinem Jump & Run." to player
+                stop
+            set {_max} to {-bwx::jr::n::%{_u}%}
+            if {_max} is 0:
+                send "&6[Jump & Run] &7Noch kein Checkpoint erreicht. Tritt auf weitere Pale-Oak-Platten." to player
+                stop
+            send "&6[Jump & Run] &7Erreichte Checkpoints: &f1 bis %{_max}% &8| &7Aktiv: &e%{-bwx::jr::cur::%{_u}%}% &8| &7Zurück: &e/jn checkpoint <Nummer>" to player
+            stop
+        if arg-1 is "setfinish":
+            if player is not op:
+                send "&cKeine Berechtigung." to player
+                stop
+            set {bwx::jrfinish::%name of world of player%} to location of (block at (location of player))
+            send "&aZiel-Platte gesetzt (die Platte, auf der du stehst). Das Jump & Run endet dort." to player
+            stop
+        if arg-1 is "delfinish":
+            if player is not op:
+                send "&cKeine Berechtigung." to player
+                stop
+            delete {bwx::jrfinish::%name of world of player%}
+            send "&aZiel-Platte entfernt." to player
+            stop
+        send "&6[Jump & Run] &7Tritt auf eine &fPale-Oak-Druckplatte&7, um zu starten. Weitere Platten sind nummerierte Checkpoints (&e/jn checkpoint <Nummer>&7)." to player
+        if {bwx::jr::best::%{_u}%} is set:
+            send "&7Deine Bestzeit: &e%{bwx::jr::best::%{_u}%}%" to player
+
+# Die 3 Jump-&-Run-Items (Bett = Checkpoint, Uhr = Neustart, Barriere = Verlassen)
+on rightclick:
+    set {_n} to "%name of player's tool%"
+    if {_n} contains "[JR]":
+        cancel event
+        set {_u} to "%uuid of player%"
+        if {-bwx::jr::active::%{_u}%} is not true:
+            bwJrRestore(player)
+            stop
+        if {_n} contains "Checkpoint":
+            teleport player to {-bwx::jr::cp::%{_u}%}
+            set fall distance of player to 0
+            send action bar "&aZurück zum Checkpoint." to player
+        else if {_n} contains "Neustart":
+            bwJrReset(player)
+        else if {_n} contains "Verlassen":
+            bwJrStop(player)
+            send "&6[Jump & Run] &7Beendet." to player
+
+on drop:
+    if "%name of event-item%" contains "[JR]":
+        cancel event
+
+on inventory click:
+    if "%name of event-item%" contains "[JR]":
+        cancel event
+
+# Falls der Server mit aktivem Jump & Run abgestürzt ist: Items beim Join zurückgeben
+on join:
+    if {bwx::jr::saved::%uuid of player%} is set:
+        bwJrRestore(player)
+
+# Admin: Pale-Oak-Druckplatte direkt unter dir setzen
+command /jrplatte:
+    aliases: jrplate
+    usage: /jrplatte
+    trigger:
+        if sender is not a player:
+            send "&cNur für Spieler!" to sender
+            stop
+        if player is not op:
+            send "&cKeine Berechtigung." to player
+            stop
+        set block at location of player to pale oak pressure plate
+        send "&aPale-Oak-Druckplatte unter dir gesetzt." to player
+
+# =========================================================
+# 15. SPRUCE-TÜREN UND DRUCKPLATTEN FÜR ALLE SPIELER
+# =========================================================
+# Spruce-Türen dürfen alle Spieler benutzen. Das Skript hebt einen Abbruch des Klicks auf, sofern der Server
+# abgebrochene Klicks überhaupt an Skript weitergibt. Ein Schutz-Plugin (z.B. WorldGuard, Lobby-Schutz)
+# kann ein Skript NICHT zuverlässig überstimmen: dort muss die Berechtigung bzw. das Flag "use" gesetzt
+# werden (Anleitung in der Antwort). Druckplatten funktionieren für alle Spieler (Jump & Run oben).
+# DEAKTIVIERT: Tueren sind in der Lobby jetzt per WorldGuard-Blacklist gesperrt. Dieser Block hat den
+# Schutz bei Spruce-Tueren wieder aufgehoben (uncancel event) und Tueren damit doch benutzbar gemacht.
+#on rightclick on spruce door with priority highest:
+#    if event is cancelled:
+#        uncancel event
+
+# =========================================================
+# 16./17. ROULETTE und BLACKJACK: siehe BedwarsGamble.sk
+# =========================================================
+
+# =========================================================
+# 18. /chelp: INTERAKTIVES HILFE-MENÜ (GUI)
+# =========================================================
+# Hauptmenü mit Kategorien. Ein Klick auf einen Befehl führt ihn aus (ohne Argumente) oder zeigt die
+# Nutzung im Chat (Befehle mit Argumenten). Admin-Kategorie nur für OPs.
+function bwHelpItem(i: item, n: text, d: text, a: text) :: item:
+    set {_x} to {_i}
+    set name of {_x} to {_n}
+    if {_a} starts with "run:":
+        set lore of {_x} to {_d} and " " and "&aKlick: ausführen" and "&8[hlp=%{_a}%]"
+    else if {_a} starts with "flow:":
+        set lore of {_x} to {_d} and " " and "&aKlick: Auswahl öffnen" and "&8[hlp=%{_a}%]"
+    else:
+        set lore of {_x} to {_d} and " " and "&eKlick: Nutzung anzeigen" and "&8[hlp=%{_a}%]"
+    return {_x}
+
+# Spielerauswahl für /pay, /addpoints, /stats
+function bwHelpPick(p: player, mode: text):
+    set {-bwx::hlp::mode::%uuid of {_p}%} to {_mode}
+    set {_inv} to chest inventory with 6 rows named "&6&lHilfe &8- &7Spieler wählen"
+    loop 54 times:
+        set {_s} to loop-number - 1
+        set slot {_s} of {_inv} to gray stained glass pane named " "
+    set {_n} to 0
+    loop all players:
+        if {_n} < 45:
+            set {_skip} to false
+            if {_mode} is "pay":
+                if loop-player is {_p}:
+                    set {_skip} to true
+            if {_skip} is false:
+                set {_x} to player head
+                set skull owner of {_x} to loop-player
+                set name of {_x} to "&f%name of loop-player%"
+                set lore of {_x} to "&7Klicken zum Auswählen" and "&8[hlp=who:%name of loop-player%]"
+                set slot {_n} of {_inv} to {_x}
+                add 1 to {_n}
+    set {_x} to arrow named "&7Zurück"
+    set lore of {_x} to "&8[hlp=cat:main]"
+    set slot 49 of {_inv} to {_x}
+    open {_inv} to {_p}
+
+# Mengenauswahl für /pay und /addpoints
+function bwHelpAmt(p: player):
+    set {_u} to "%uuid of {_p}%"
+    set {_inv} to chest inventory with 3 rows named "&6&lHilfe &8- &7Menge wählen"
+    loop 27 times:
+        set {_s} to loop-number - 1
+        set slot {_s} of {_inv} to gray stained glass pane named " "
+    set {_n} to 0
+    loop 10, 50, 100, 500, 1000 and 5000:
+        set {_sl} to 10 + {_n}
+        set {_x} to gold nugget named "&e%loop-value% Punkte"
+        set lore of {_x} to "&7An &f%{-bwx::hlp::target::%{_u}%}%" and "&8[hlp=amt:%loop-value%]"
+        set slot {_sl} of {_inv} to {_x}
+        add 1 to {_n}
+    set {_x} to nether star named "&c&lAlles"
+    set lore of {_x} to "&7Dein ganzes Guthaben (&e%bwPts({_u})%&7)" and "&8[hlp=amt:all]"
+    set slot 16 of {_inv} to {_x}
+    set {_x} to writable book named "&bEigene Zahl"
+    set lore of {_x} to "&7Du schreibst die Menge in den Chat" and "&8[hlp=amt:chat]"
+    set slot 22 of {_inv} to {_x}
+    set {_x} to book named "&6Empfänger: &f%{-bwx::hlp::target::%{_u}%}%"
+    set lore of {_x} to "&7Dein Guthaben: &e%bwPts({_u})% Punkte"
+    set slot 4 of {_inv} to {_x}
+    set {_x} to arrow named "&7Zurück"
+    set lore of {_x} to "&8[hlp=cat:main]"
+    set slot 26 of {_inv} to {_x}
+    open {_inv} to {_p}
+
+# Auswahl aus Listen (Arenen, Teams, Inhaber, Smaragd-Spawner)
+function bwHelpChoose(p: player, mode: text):
+    set {-bwx::hlp::mode::%uuid of {_p}%} to {_mode}
+    set {_inv} to chest inventory with 6 rows named "&6&lHilfe &8- &7Auswahl"
+    loop 54 times:
+        set {_s} to loop-number - 1
+        set slot {_s} of {_inv} to gray stained glass pane named " "
+    set {_n} to 0
+    if {_mode} is "join" or "gamestop":
+        loop all worlds:
+            if bwIsArena(loop-world) is true:
+                if {_n} < 45:
+                    set {_x} to red bed named "&f%name of loop-world%"
+                    set lore of {_x} to "&7Spieler: &e%size of (all players in loop-world)%" and "&8[hlp=sel:%name of loop-world%]"
+                    set slot {_n} of {_inv} to {_x}
+                    add 1 to {_n}
+    else if {_mode} is "top":
+        loop "kills", "wins", "beds", "finalkills", "games", "deaths", "level" and "punkte":
+            set {_x} to paper named "&e%loop-value%"
+            set lore of {_x} to "&7Top 10 anzeigen" and "&8[hlp=sel:%loop-value%]"
+            set slot {_n} of {_inv} to {_x}
+            add 1 to {_n}
+    else if {_mode} is "resetall":
+        set {_x} to lime concrete named "&aJa: Punkte, Level, Statistiken ALLER Spieler zurücksetzen"
+        set lore of {_x} to "&7Gekaufte Kosmetika bleiben" and "&8[hlp=sel:yes]"
+        set slot 20 of {_inv} to {_x}
+        set {_x} to red concrete named "&cJa: zusätzlich auch alle Kosmetika löschen"
+        set lore of {_x} to "&7Unwiderruflich!" and "&8[hlp=sel:yeskos]"
+        set slot 24 of {_inv} to {_x}
+        set {_n} to 2
+    else if {_mode} is "esadd":
+        loop "red", "blue", "green", "yellow", "cyan", "white", "pink", "gray", "lime", "orange", "magenta", "light_blue", "light_gray", "brown" and "black":
+            set {_x} to bwTeamWool(loop-value)
+            set name of {_x} to "%bwTeamColor(loop-value)%%bwTeamNameDE(loop-value)%"
+            set lore of {_x} to "&7Team wählen" and "&8[hlp=sel:%loop-value%]"
+            set slot {_n} of {_inv} to {_x}
+            add 1 to {_n}
+    else if {_mode} is "ownrem":
+        loop {bwx::owner::*}:
+            if {_n} < 45:
+                set {_x} to golden helmet named "&f%loop-index%"
+                set lore of {_x} to "&7%loop-value%" and "&8[hlp=sel:%loop-index%]"
+                set slot {_n} of {_inv} to {_x}
+                add 1 to {_n}
+    else if {_mode} is "esrem":
+        loop {bw::esp::*}:
+            if {_n} < 45:
+                set {_x} to emerald block named "&f%loop-index%"
+                set lore of {_x} to "&7Team: %{bw::espteam::%loop-index%}%" and "&8[hlp=sel:%loop-index%]"
+                set slot {_n} of {_inv} to {_x}
+                add 1 to {_n}
+    else if {_mode} is "jrcp":
+        set {_uu} to "%uuid of {_p}%"
+        if {-bwx::jr::active::%{_uu}%} is true:
+            set {_x} to ender eye named "&aStart"
+            set lore of {_x} to "&7Zurück zum Startpunkt" and "&8[hlp=sel:0]"
+            set slot {_n} of {_inv} to {_x}
+            add 1 to {_n}
+            loop {-bwx::jr::n::%{_uu}%} times:
+                if {_n} < 45:
+                    set {_x} to pale oak pressure plate named "&aCheckpoint %loop-number%"
+                    if {-bwx::jr::cur::%{_uu}%} is loop-number:
+                        set lore of {_x} to "&e► Aktiver Checkpoint" and "&7Klicken zum Teleportieren" and "&8[hlp=sel:%loop-number%]"
+                    else:
+                        set lore of {_x} to "&7Klicken zum Teleportieren" and "&8[hlp=sel:%loop-number%]"
+                    set slot {_n} of {_inv} to {_x}
+                    add 1 to {_n}
+    else if {_mode} is "musik":
+        loop {-bwx::music::files::*}:
+            if {_n} < 45:
+                set {_x} to note block named "&f%loop-value%"
+                set lore of {_x} to "&7Klicken, danach Distanz wählen" and "&8[hlp=sel:%loop-value%]"
+                set slot {_n} of {_inv} to {_x}
+                add 1 to {_n}
+    else if {_mode} is "musikdist":
+        loop 16, 30, 50, 75 and 100:
+            set {_x} to compass named "&e%loop-value% Blöcke"
+            set lore of {_x} to "&7So weit ist die Musik zu hören" and "&8[hlp=sel:%loop-value%]"
+            set slot {_n} of {_inv} to {_x}
+            add 1 to {_n}
+    if {_n} is 0:
+        set {_x} to barrier named "&cNichts zur Auswahl vorhanden"
+        set slot 22 of {_inv} to {_x}
+    set {_x} to arrow named "&7Zurück"
+    set lore of {_x} to "&8[hlp=cat:main]"
+    set slot 49 of {_inv} to {_x}
+    open {_inv} to {_p}
+
+function bwHelpMain(p: player):
+    set {_inv} to chest inventory with 4 rows named "&6&lBedwars-Hilfe"
+    loop 36 times:
+        set {_s} to loop-number - 1
+        set slot {_s} of {_inv} to gray stained glass pane named " "
+    set slot 10 of {_inv} to bwHelpItem(iron sword, "&cSpielen", "&7Beitreten, verlassen, zuschauen, Jump & Run", "cat:play")
+    set slot 11 of {_inv} to bwHelpItem(gold ingot, "&6Punkte & Wirtschaft", "&7Punkte, /pay, Bank, Aktien", "cat:eco")
+    set slot 12 of {_inv} to bwHelpItem(nether star, "&dGamble-Hub", "&7Glücksrad, Münzwurf, Slots, Roulette, Blackjack", "cat:gamble")
+    set slot 13 of {_inv} to bwHelpItem(blaze powder, "&eKosmetik & Einstellungen", "&7Effekte kaufen, Hotbar sortieren", "cat:cos")
+    set slot 14 of {_inv} to bwHelpItem(book, "&bInfo & Statistik", "&7Stats, Bestenliste, Inhaber, Vorschläge", "cat:info")
+    if {_p} is op:
+        set slot 16 of {_inv} to bwHelpItem(command block, "&4Admin", "&7Nur für Admins", "cat:admin")
+    set slot 31 of {_inv} to bwHelpItem(barrier, "&cSchliessen", "&7Menü schliessen", "close")
+    open {_inv} to {_p}
+
+function bwHelpCat(p: player, c: text):
+    # Normale Kategorien: 4 Zeilen (Zurueck-Pfeil auf Slot 31). Admin: 6 Zeilen, nach Bereichen geordnet.
+    set {_rows} to 4
+    set {_back} to 31
+    set {_title} to "&6&lHilfe &8- &7Befehle"
+    if {_c} is "admin":
+        set {_rows} to 6
+        set {_back} to 49
+        set {_title} to "&6&lHilfe &8- &4Admin"
+    set {_inv} to chest inventory with {_rows} rows named {_title}
+    loop ({_rows} * 9) times:
+        set {_s} to loop-number - 1
+        set slot {_s} of {_inv} to gray stained glass pane named " "
+    if {_c} is "play":
+        # Reihe 1: Arena-Befehle
+        set slot 10 of {_inv} to bwHelpItem(iron sword, "&e/bw join", "&7Arena aus der Liste wählen und beitreten", "flow:join")
+        set slot 11 of {_inv} to bwHelpItem(paper, "&e/bw list", "&7Alle Arenen anzeigen", "run:bw list")
+        set slot 12 of {_inv} to bwHelpItem(red bed, "&e/bw leave", "&7Arena verlassen", "run:bw leave")
+        set slot 13 of {_inv} to bwHelpItem(ender pearl, "&e/bw rejoin", "&7Erneut beitreten", "run:bw rejoin")
+        set slot 14 of {_inv} to bwHelpItem(compass, "&e/bw autojoin", "&7Zufällige Arena", "run:bw autojoin")
+        set slot 15 of {_inv} to bwHelpItem(spyglass, "&e/spectate", "&7Einem laufenden Spiel zuschauen (Spielerauswahl, Folgen)", "run:spectate")
+        # Reihe 2: Gruppe und Chat
+        set slot 19 of {_inv} to bwHelpItem(player head, "&e/party", "&7Party-Befehle", "run:party")
+        set slot 20 of {_inv} to bwHelpItem(goat horn, "&e/shout <Nachricht>", "&7An alle schreiben (auch Präfix @a / @t)", "flow:shout")
+        # Reihe 3: Jump & Run
+        set slot 28 of {_inv} to bwHelpItem(pale oak pressure plate, "&eJump & Run", "&7Tritt auf eine Pale-Oak-Druckplatte. Platten = nummerierte Checkpoints", "say:/jn checkpoint <Nummer>  |  /jn list  |  /jn stop")
+        set slot 29 of {_inv} to bwHelpItem(ender eye, "&eCheckpoint wählen", "&7/jn checkpoint <Nummer>", "flow:jrcp")
+        set slot 30 of {_inv} to bwHelpItem(barrier, "&eJump & Run beenden", "&7/jn stop", "run:jumprun stop")
+    else if {_c} is "eco":
+        set slot 10 of {_inv} to bwHelpItem(gold ingot, "&e/punkte", "&7Dein Level, XP, Punkte, Bank, Depot", "run:punkte")
+        set slot 11 of {_inv} to bwHelpItem(emerald, "&e/pay <Spieler> <Anzahl>", "&7Punkte an einen Spieler überweisen", "flow:pay")
+        set slot 12 of {_inv} to bwHelpItem(gold block, "&e/bank", "&7Punkte anlegen, Zinsen kassieren", "run:bank")
+        set slot 13 of {_inv} to bwHelpItem(diamond, "&e/aktien", "&7Börse: Aktien kaufen und verkaufen", "run:aktien")
+        set slot 14 of {_inv} to bwHelpItem(clock, "&e/gamble bonus", "&7Täglicher Bonus", "run:gamble bonus")
+    else if {_c} is "gamble":
+        set slot 10 of {_inv} to bwHelpItem(nether star, "&e/gamble", "&7Gamble-Hub", "run:gamble")
+        set slot 11 of {_inv} to bwHelpItem(nether star, "&6Glücksrad", "&7/gamble rad", "run:gamble rad")
+        set slot 12 of {_inv} to bwHelpItem(gold ingot, "&eMünzwurf", "&7/gamble muenzwurf", "run:gamble muenzwurf")
+        set slot 13 of {_inv} to bwHelpItem(diamond, "&bSpielautomat", "&7/gamble slots", "run:gamble slots")
+        set slot 14 of {_inv} to bwHelpItem(red concrete, "&4Roulette", "&7/gamble roulette", "run:gamble roulette")
+        set slot 15 of {_inv} to bwHelpItem(paper, "&2Blackjack", "&7/gamble blackjack", "run:gamble blackjack")
+        set slot 16 of {_inv} to bwHelpItem(book, "&dStatistik", "&7/gamble stats", "run:gamble stats")
+    else if {_c} is "cos":
+        set slot 10 of {_inv} to bwHelpItem(blaze powder, "&e/kosmetik", "&7Pfeilspuren, Betten-Explosionen, Kill-Effekte", "run:kosmetik")
+        set slot 11 of {_inv} to bwHelpItem(comparator, "&e/settings", "&7Hotbar-Sortierung und Quickshop", "run:settings")
+    else if {_c} is "info":
+        set slot 10 of {_inv} to bwHelpItem(paper, "&e/stats [Spieler]", "&7Kills, Siege, Betten ... (Spieler wählen)", "flow:stats")
+        set slot 11 of {_inv} to bwHelpItem(diamond sword, "&e/top", "&7Bestenliste: Art im Menü wählen", "flow:top")
+        set slot 12 of {_inv} to bwHelpItem(golden helmet, "&e/inhaber", "&7Die Inhaber des Servers", "run:inhaber")
+        set slot 13 of {_inv} to bwHelpItem(writable book, "&e/vorschlag <Text>", "&7Vorschlag einreichen (alle {@suggest_hours} Stunden)", "flow:suggest")
+        set slot 14 of {_inv} to bwHelpItem(map, "&e/bw stats", "&7Deine SBW-Statistik", "run:bw stats")
+        set slot 15 of {_inv} to bwHelpItem(gold block, "&e/bw leaderboard", "&7SBW-Bestenliste", "run:bw leaderboard")
+    else if {_c} is "admin":
+        if {_p} is not op:
+            stop
+        # Jede Reihe ist ein Bereich, links steht die Ueberschrift (Slots 9, 18, 27, 36)
+        set slot 9 of {_inv} to red banner named "&c&lSpiel & Arenen"
+        set slot 10 of {_inv} to bwHelpItem(barrier, "&c/game stop", "&7Arena wählen, Spiel abbrechen", "flow:gamestop")
+        set slot 11 of {_inv} to bwHelpItem(armor stand, "&c/teamdebug", "&7Team, Teamtruhe, Forge-Stufe", "run:teamdebug")
+        set slot 12 of {_inv} to bwHelpItem(furnace, "&c/resetteamchests", "&7Rundendaten aller Welten löschen", "run:resetteamchests")
+        set slot 13 of {_inv} to bwHelpItem(leather chestplate, "&c/resetteamcolors", "&7Gelernte Teamfarben löschen", "run:resetteamcolors")
+        set slot 14 of {_inv} to bwHelpItem(clock, "&c/arenanormal", "&7Schwierigkeit deiner Welt auf normal", "run:arenanormal")
+        set slot 15 of {_inv} to bwHelpItem(experience bottle, "&c/noadvancements", "&7Advancement-Meldungen in deiner Welt aus", "run:noadvancements")
+        set slot 16 of {_inv} to bwHelpItem(compass, "&c/setbwlobby", "&7Lobby-Punkt setzen", "run:setbwlobby")
+        set slot 18 of {_inv} to orange banner named "&6&lSpieler & Server"
+        set slot 19 of {_inv} to bwHelpItem(emerald, "&c/addpoints <Spieler> <Anzahl>", "&7Punkte geben", "flow:addpoints")
+        set slot 20 of {_inv} to bwHelpItem(tnt, "&c/resetstats", "&7Spieler wählen, Statistiken zurücksetzen", "flow:resetstats")
+        set slot 21 of {_inv} to bwHelpItem(redstone, "&c/resetstats all", "&7Alle Spieler zurücksetzen (mit Bestätigung)", "flow:resetall")
+        set slot 22 of {_inv} to bwHelpItem(golden helmet, "&c/inhaber add", "&7Name und Rolle in den Chat schreiben", "flow:ownadd")
+        set slot 23 of {_inv} to bwHelpItem(barrier, "&cInhaber entfernen", "&7Aus der Liste wählen", "flow:ownrem")
+        set slot 24 of {_inv} to bwHelpItem(writable book, "&c/vorschlaege", "&7Vorschläge lesen, verwalten, zurücksetzen", "run:vorschlaege")
+        set slot 25 of {_inv} to bwHelpItem(paper, "&c/qsstatus [reset]", "&7Gelernte Quickshop-Items", "run:qsstatus")
+        set slot 27 of {_inv} to green banner named "&a&lSmaragd-Spawner"
+        set slot 28 of {_inv} to bwHelpItem(emerald block, "&cSmaragd-Spawner setzen", "&7Team wählen, Namen in den Chat schreiben. Stehe an der Stelle!", "flow:esadd")
+        set slot 29 of {_inv} to bwHelpItem(barrier, "&cSmaragd-Spawner entfernen", "&7Aus der Liste wählen", "flow:esrem")
+        set slot 30 of {_inv} to bwHelpItem(paper, "&cSmaragd-Spawner Liste", "&7/emeraldspawner list", "run:emeraldspawner list")
+        set slot 31 of {_inv} to bwHelpItem(emerald, "&cSmaragd-Vorlage", "&7Smaragd aus Map-Spawner in der Hand halten", "run:emeraldspawner template")
+        set slot 36 of {_inv} to light blue banner named "&b&lJump & Run"
+        set slot 37 of {_inv} to bwHelpItem(pale oak pressure plate, "&c/jumprun setfinish", "&7Ziel-Platte setzen (auf der Platte stehen)", "run:jumprun setfinish")
+        set slot 38 of {_inv} to bwHelpItem(pale oak pressure plate, "&c/jumprun delfinish", "&7Ziel-Platte entfernen", "run:jumprun delfinish")
+        set slot 39 of {_inv} to bwHelpItem(pale oak pressure plate, "&c/jrplatte", "&7Pale-Oak-Druckplatte direkt unter dir setzen", "run:jrplatte")
+        set slot 45 of {_inv} to yellow banner named "&e&lLevel, XP & Werkzeuge"
+        set slot 46 of {_inv} to bwHelpItem(experience bottle, "&c/level add <Spieler> [Anzahl]", "&7Spieler wählen, Level um 1 erhöhen (mehr per Befehl)", "flow:leveladd")
+        set slot 47 of {_inv} to bwHelpItem(barrier, "&c/xp reset <Spieler>", "&7XP und Level eines Spielers zurücksetzen", "flow:xpreset")
+        set slot 48 of {_inv} to bwHelpItem(leather chestplate, "&c/teamitem <Farbe>", "&7Brustplatte einer Teamfarbe holen (z.B. red, blue)", "say:/teamitem <Farbe>")
+        set slot 50 of {_inv} to bwHelpItem(spyglass, "&c/itemdebug", "&7Name, Lore und Typ des Items in deiner Hand", "run:itemdebug")
+        set slot 0 of {_inv} to purple banner named "&5&lMusik"
+        set slot 1 of {_inv} to bwHelpItem(note block, "&c/musik play", "&7Datei und Distanz wählen, die Musik spielt an deiner Position", "flow:musik")
+        set slot 2 of {_inv} to bwHelpItem(barrier, "&c/musik stop", "&7Musik für alle Spieler beenden", "run:musik stop")
+        set slot 3 of {_inv} to bwHelpItem(paper, "&c/musik list", "&7Alle Dateien im Ordner plugins/Musik", "run:musik list")
+        set slot 4 of {_inv} to bwHelpItem(clock, "&c/musik reload", "&7Ordner neu einlesen", "run:musik reload")
+    set slot {_back} of {_inv} to bwHelpItem(arrow, "&7Zurück", "&7Zum Hauptmenü", "cat:main")
+    open {_inv} to {_p}
+
+command /chelp:
+    trigger:
+        if sender is not a player:
+            send "&cNur für Spieler!" to sender
+            stop
+        bwHelpMain(player)
+
+on inventory click:
+    set {_t} to "%name of player's current inventory%"
+    if {_t} contains "Hilfe":
+        cancel event
+        set {_ci} to event-item
+        if {_ci} is not set:
+            stop
+        set {_l} to "%lore of {_ci}%"
+        if {_l} does not contain "[hlp=":
+            stop
+        set {_p} to player
+        set {_parts::*} to split {_l} at "[hlp="
+        set {_rest::*} to split "%{_parts::2}%" at "]"
+        set {_a} to {_rest::1}
+        wait 1 tick
+        if {_a} is "close":
+            close {_p}'s inventory
+            stop
+        if {_a} is "cat:main":
+            bwHelpMain({_p})
+            stop
+        if {_a} starts with "cat:":
+            replace all "cat:" with "" in {_a}
+            bwHelpCat({_p}, {_a})
+            stop
+        if {_a} starts with "run:":
+            replace all "run:" with "" in {_a}
+            close {_p}'s inventory
+            make {_p} execute command {_a}
+            stop
+        set {_u} to "%uuid of {_p}%"
+        if {_a} starts with "flow:":
+            replace all "flow:" with "" in {_a}
+            delete {-bwx::hlp::target::%{_u}%}
+            if {_a} is "suggest" or "shout" or "ownadd":
+                close {_p}'s inventory
+                set {-bwx::hlp::input::%{_u}%} to {_a}
+                if {_a} is "ownadd":
+                    send "&6[Hilfe] &7Schreibe &fName Rolle &7in den Chat, z.B. &fSteve Owner&7. &8(&eabbrechen&8 = Abbruch)" to {_p}
+                else:
+                    send "&6[Hilfe] &7Schreibe jetzt deinen Text in den Chat. &8(&eabbrechen&8 = Abbruch)" to {_p}
+                stop
+            if {_a} is "join" or "gamestop" or "esadd" or "ownrem" or "esrem" or "top" or "resetall" or "jrcp" or "musik":
+                bwHelpChoose({_p}, {_a})
+                stop
+            bwHelpPick({_p}, {_a})
+            stop
+        if {_a} starts with "sel:":
+            replace all "sel:" with "" in {_a}
+            set {_mode} to {-bwx::hlp::mode::%{_u}%}
+            if {_mode} is "musik":
+                # Datei gewaehlt -> als naechstes die Distanz waehlen
+                set {-bwx::hlp::target::%{_u}%} to {_a}
+                bwHelpChoose({_p}, "musikdist")
+                stop
+            close {_p}'s inventory
+            if {_mode} is "join":
+                make {_p} execute command "bw join %{_a}%"
+            else if {_mode} is "gamestop":
+                make {_p} execute command "game stop %{_a}%"
+            else if {_mode} is "ownrem":
+                make {_p} execute command "inhaber remove %{_a}%"
+            else if {_mode} is "esrem":
+                make {_p} execute command "emeraldspawner remove %{_a}%"
+            else if {_mode} is "musikdist":
+                make {_p} execute command "musik play %{_a}% %{-bwx::hlp::target::%{_u}%}%"
+            else if {_mode} is "jrcp":
+                make {_p} execute command "jn checkpoint %{_a}%"
+            else if {_mode} is "top":
+                make {_p} execute command "top %{_a}%"
+            else if {_mode} is "resetall":
+                if {_p} is op:
+                    if {_a} is "yes":
+                        make {_p} execute command "resetstats all confirm"
+                    else if {_a} is "yeskos":
+                        make {_p} execute command "resetstats all confirm kosmetik"
+            else if {_mode} is "esadd":
+                set {-bwx::hlp::target::%{_u}%} to {_a}
+                set {-bwx::hlp::input::%{_u}%} to "esadd"
+                send "&6[Hilfe] &7Schreibe den Namen/die Nummer des Spawners in den Chat (du musst an der richtigen Stelle stehen). &8(&eabbrechen&8 = Abbruch)" to {_p}
+            stop
+        if {_a} starts with "who:":
+            replace all "who:" with "" in {_a}
+            set {-bwx::hlp::target::%{_u}%} to {_a}
+            if {-bwx::hlp::mode::%{_u}%} is "stats":
+                close {_p}'s inventory
+                make {_p} execute command "stats %{_a}%"
+                stop
+            if {-bwx::hlp::mode::%{_u}%} is "resetstats":
+                close {_p}'s inventory
+                make {_p} execute command "resetstats %{_a}%"
+                stop
+            if {-bwx::hlp::mode::%{_u}%} is "leveladd":
+                close {_p}'s inventory
+                make {_p} execute command "level add %{_a}%"
+                stop
+            if {-bwx::hlp::mode::%{_u}%} is "xpreset":
+                close {_p}'s inventory
+                make {_p} execute command "xp reset %{_a}%"
+                stop
+            bwHelpAmt({_p})
+            stop
+        if {_a} starts with "amt:":
+            replace all "amt:" with "" in {_a}
+            set {_mode} to {-bwx::hlp::mode::%{_u}%}
+            set {_t2} to {-bwx::hlp::target::%{_u}%}
+            if {_mode} is not set:
+                stop
+            if {_t2} is not set:
+                stop
+            if {_mode} is "addpoints":
+                if {_p} is not op:
+                    close {_p}'s inventory
+                    stop
+            if {_a} is "chat":
+                close {_p}'s inventory
+                set {-bwx::hlp::input::%{_u}%} to {_mode}
+                send "&6[Hilfe] &7Schreibe jetzt die Menge in den Chat. &8(&eabbrechen&8 = Abbruch)" to {_p}
+                stop
+            if {_a} is "all":
+                set {_a} to "%bwPts({_u})%"
+            close {_p}'s inventory
+            make {_p} execute command "%{_mode}% %{_t2}% %{_a}%"
+            stop
+        if {_a} starts with "say:":
+            replace all "say:" with "" in {_a}
+            close {_p}'s inventory
+            send "&6[Hilfe] &7Nutzung: &e%{_a}%" to {_p}
+
+# Texteingabe aus dem Hilfe-Menü (eigene Menge, Vorschlag, Shout)
+on chat with priority lowest:
+    set {_u} to "%uuid of player%"
+    set {_mode} to {-bwx::hlp::input::%{_u}%}
+    if {_mode} is not set:
+        stop
+    cancel event
+    delete {-bwx::hlp::input::%{_u}%}
+    set {_m} to message
+    set {_p} to player
+    wait 1 tick
+    if {_m} is "abbrechen":
+        send "&6[Hilfe] &7Abgebrochen." to {_p}
+        stop
+    if {_mode} is "suggest":
+        make {_p} execute command "vorschlag %{_m}%"
+        stop
+    if {_mode} is "shout":
+        make {_p} execute command "shout %{_m}%"
+        stop
+    if {_mode} is "ownadd":
+        make {_p} execute command "inhaber add %{_m}%"
+        stop
+    if {_mode} is "esadd":
+        make {_p} execute command "emeraldspawner add %{_m}% %{-bwx::hlp::target::%{_u}%}%"
+        stop
+    set {_n} to {_m} parsed as integer
+    if {_n} is not set:
+        send "&cDas ist keine ganze Zahl. Abgebrochen." to {_p}
+        stop
+    make {_p} execute command "%{_mode}% %{-bwx::hlp::target::%{_u}%}% %{_n}%"
+
+# =========================================================
+# 19. /inhaber
+# =========================================================
+# Zeigt die Inhaber des Servers. Admins pflegen die Liste im Spiel:
+#   /inhaber add <Name> [Rolle]    /inhaber remove <Name>
+command /inhaber [<text>] [<text>] [<text>]:
+    aliases: owner, owners
+    usage: /inhaber
+    trigger:
+        if arg-1 is "add":
+            if sender is not op:
+                send "&cKeine Berechtigung." to sender
+                stop
+            if arg-2 is not set:
+                send "&cNutzung: /inhaber add <Name> [Rolle]" to sender
+                stop
+            set {_role} to "Inhaber"
+            if arg-3 is set:
+                set {_role} to arg-3
+            set {bwx::owner::%arg-2%} to {_role}
+            send "&a%arg-2% wurde als &f%{_role}% &aeingetragen." to sender
+            stop
+        if arg-1 is "remove":
+            if sender is not op:
+                send "&cKeine Berechtigung." to sender
+                stop
+            if arg-2 is not set:
+                send "&cNutzung: /inhaber remove <Name>" to sender
+                stop
+            delete {bwx::owner::%arg-2%}
+            send "&a%arg-2% wurde entfernt." to sender
+            stop
+        send "&8&m-----------&r &6&lServer-Inhaber &8&m-----------" to sender
+        if size of {bwx::owner::*} is 0:
+            send "&7Noch keine Inhaber eingetragen." to sender
+            if sender is op:
+                send "&7Admins: &e/inhaber add <Name> [Rolle]" to sender
+        else:
+            loop {bwx::owner::*}:
+                send "&e★ &f&l%loop-index% &8- &7%loop-value%" to sender
+        send "&8&m------------------------------------" to sender

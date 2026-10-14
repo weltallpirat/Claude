@@ -1,0 +1,2719 @@
+# =========================================================
+# BEDWARS SYSTEM, MECHANICS & CUSTOM ITEMS
+# (Syntax gegen Skript 2.16 geprüft)
+# =========================================================
+
+options:
+    # true = natürliches Gelände (Gras, Erde, Stein, Sand, Holz ...) überlebt Explosionen
+    protect_landscape: true
+    # Sekunden zwischen zwei Smaragden pro Smaragd-Spawner der Schmiede (ab Stufe 3): alle 60 Sekunden
+    emerald_interval: 60
+    # Arena-Welten im Squad-Modus (Komma getrennt, KEINE Leerzeichen).
+    # (Nur noch für Squad-Funktionen genutzt, NICHT mehr für die Spawner-Menge: Eisen droppt überall 1x)
+    squad_worlds: BedwarsRooftop,BedwarsWilderWestern,BedwarsPlayground
+    # Name der Lobby-Welt: dort wird Level/Punkte-Anzeige gezeigt
+    lobby_world: Lobby
+    # Punkte pro Aktion (kommen ueber die SBW-Rewards aus der config.yml)
+    pts_join: 10
+    pts_kill: 10
+    pts_final_kill: 20
+    pts_bed: 50
+    pts_win: 100
+    # Maximales Level
+    max_level: 100
+    # Gamble: Stunden zwischen zwei Tagesboni und Grundbonus (+10 pro Tag Serie bis Tag 7, +2 pro Level)
+    daily_hours: 20
+    daily_base: 50
+    # Schmiede: Smaragd-Intervall ab Stufe 4 (Sekunden). Gleich wie Stufe 3 = Smaragde alle 60 Sekunden.
+    emerald_interval_max: 60
+    # Schmiede: Ein Eisen-/Gold-Spawner gehört zum Team, dessen Smaragd-Spawner (/emeraldspawner)
+    # am nächsten liegt, wenn dieser höchstens so viele Blöcke entfernt ist
+    forge_radius: 30
+    # Schmiede-Bonus: Das Skript fasst den NORMALEN Spawner-Drop (Eisen alle 0,75 s laut config.yml)
+    # nie an: nicht abbrechen, nicht verschieben, nicht verteilen. Die Schmiede legt nur ZUSAETZLICHES
+    # Eisen/Gold direkt neben den normalen Drop. Das Teilen unter Spielern am Spawner macht allein das
+    # SBA-Plugin (sbaconfig.yml -> generator-splitter), damit nichts doppelt verteilt wird.
+    # false = das Skript fasst die Spawner GAR NICHT an (keine Schmiede-Boni). Zum Testen:
+    # ist das Eisen dann normal, lag es am Skript.
+    spawner_boost: true
+    # Maximale Anzahl auf dem Boden pro Spawner (Summe aller Items im Umkreis). Gilt für Map- UND Schmiede-Spawner.
+    max_diamonds: 6
+    max_emeralds: 4
+    # Umkreis in Blöcken um den Spawner, in dem gezählt wird
+    cap_radius: 2.5
+
+# =========================================================
+# HILFSFUNKTIONEN
+# =========================================================
+
+# Deutsche Teamnamen (wie in der Teamauswahl) -> interner Farbname
+function bwTeamAlias(t: text) :: text:
+    set {_t} to {_t} in lowercase
+    replace all " " with "_" in {_t}
+    if {_t} is "blau":
+        return "blue"
+    if {_t} is "gelb":
+        return "yellow"
+    if {_t} is "grau":
+        return "gray"
+    if {_t} is "grün" or "gruen":
+        return "lime"
+    if {_t} is "dunkelgrün" or "dunkelgruen":
+        return "green"
+    if {_t} is "rosa" or "pink":
+        return "pink"
+    if {_t} is "rot":
+        return "red"
+    if {_t} is "türkis" or "tuerkis":
+        return "cyan"
+    if {_t} is "weiß" or "weiss":
+        return "white"
+    if {_t} is "schwarz":
+        return "black"
+    if {_t} is "braun":
+        return "brown"
+    if {_t} is "hellblau":
+        return "light_blue"
+    if {_t} is "hellgrau":
+        return "light_gray"
+    if {_t} is "lila":
+        return "magenta"
+    return {_t}
+
+# interner Farbname -> deutscher Teamname (für Anzeigen)
+function bwTeamGerman(t: text) :: text:
+    if {_t} is "blue":
+        return "Blau"
+    if {_t} is "yellow":
+        return "Gelb"
+    if {_t} is "gray":
+        return "Grau"
+    if {_t} is "lime":
+        return "Grün"
+    if {_t} is "green":
+        return "Dunkelgrün"
+    if {_t} is "pink":
+        return "Rosa"
+    if {_t} is "red":
+        return "Rot"
+    if {_t} is "cyan":
+        return "Türkis"
+    if {_t} is "white":
+        return "Weiß"
+    return {_t}
+
+# SBW-Teamfarben (exakte Lederfarben aus dem SBW-Quellcode). Teams heißen dadurch
+# direkt wie ihre Farbe (red, blue, green, yellow, cyan, white, pink, gray, ...).
+function bwAddPreset(n: text, r: number, g: number, b: number):
+    set {_i} to leather chestplate
+    dye {_i} ({_r}, {_g}, {_b})
+    set {-bw::preset::%{_n}%} to {_i}
+
+function bwBuildPresets():
+    delete {-bw::preset::*}
+    bwAddPreset("black", 0, 0, 0)
+    bwAddPreset("blue", 0, 0, 170)
+    bwAddPreset("green", 0, 170, 0)
+    bwAddPreset("red", 255, 85, 85)
+    bwAddPreset("magenta", 170, 0, 170)
+    bwAddPreset("orange", 255, 170, 0)
+    bwAddPreset("light_gray", 170, 170, 170)
+    bwAddPreset("gray", 85, 85, 85)
+    bwAddPreset("light_blue", 85, 85, 255)
+    bwAddPreset("lime", 85, 255, 85)
+    bwAddPreset("cyan", 85, 255, 255)
+    bwAddPreset("pink", 255, 85, 255)
+    bwAddPreset("yellow", 255, 255, 85)
+    bwAddPreset("white", 255, 255, 255)
+    bwAddPreset("brown", 139, 69, 19)
+
+on load:
+    bwBuildPresets()
+    # Glücksrad: ein beim Reload/Absturz unterbrochener Spin gibt den Einsatz zurück und gibt den Spieler wieder frei
+    loop {bwg::pend::*}:
+        add loop-value to {bwp::pts::%loop-index%}
+        delete {bwg::pend::%loop-index%}
+    delete {-bwg::spin::*}
+
+# Team-Kennung: zuerst Farbname (red, blue, ...), sonst team1, team2, ... (gelernt).
+# Skript kann die Farbe von Lederrüstung nicht auslesen, deshalb wird die Brustplatte
+# mit bekannten bzw. gelernten Vorlagen verglichen.
+# NEU: Das zuletzt erkannte Team wird pro Spieler und Welt gemerkt. Fehlt die Rüstung kurz
+# (Tod, Respawn, Unsichtbarkeit, Spectator), bleibt das Team erhalten. Dadurch ändert sich der
+# Schlüssel der Schmiede/Upgrades mitten im Spiel nicht mehr.
+# Optional: {bw.team::<spieler>} überschreibt die Erkennung.
+function bwTeam(p: player) :: text:
+    if {bw.team::%{_p}%} is set:
+        return "%{bw.team::%{_p}%}%"
+    set {_u} to "%uuid of {_p}%"
+    set {_wn} to name of world of {_p}
+    set {_c} to chestplate of {_p}
+    if {bw::invis::%{_p}%} is true:
+        set {_c} to {bw::invis_armor::%{_p}%::chest}
+    if "%type of {_c}%" contains "leather chestplate":
+        if {-bw::preset::*} is not set:
+            bwBuildPresets()
+        loop {-bw::preset::*}:
+            if {_c} is loop-value:
+                set {-bw::tc::%{_u}%} to "%{_wn}%|%loop-index%"
+                return loop-index
+        loop {bw::tref::*}:
+            if {_c} is loop-value:
+                set {-bw::tc::%{_u}%} to "%{_wn}%|team%loop-index%"
+                return "team%loop-index%"
+        # Neue Teamfarben nur im Spiel lernen (nicht in der Lobby/als Zuschauer)
+        if gamemode of {_p} is survival:
+            set {_n} to size of {bw::tref::*} + 1
+            set {bw::tref::%{_n}%} to {_c}
+            set {-bw::tc::%{_u}%} to "%{_wn}%|team%{_n}%"
+            return "team%{_n}%"
+    # Rüstung gerade nicht erkennbar -> zuletzt bekanntes Team in dieser Welt
+    if {-bw::tc::%{_u}%} is set:
+        set {_parts::*} to split "%{-bw::tc::%{_u}%}%" at "|"
+        if {_parts::1} is {_wn}:
+            return {_parts::2}
+    return "none"
+
+# true, wenn unter dem Spieler (40 Blöcke) kein fester Block ist (Void)
+function overVoid(p: player) :: boolean:
+    set {_l} to location of {_p}
+    loop 40 times:
+        if (block at ({_l} offset by vector(0, 0 - loop-number, 0))) is solid:
+            return false
+    return true
+
+# Schlüssel "Welt|Team" (pro Arena-Welt und Team eindeutig)
+function bwKey(p: player) :: text:
+    return "%name of world of {_p}%|%bwTeam({_p})%"
+
+function toolTier(i: item) :: number:
+    set {_n} to "%type of {_i}%"
+    if {_n} contains "wooden":
+        return 1
+    if {_n} contains "stone":
+        return 2
+    if {_n} contains "golden":
+        return 2
+    if {_n} contains "iron":
+        return 3
+    if {_n} contains "diamond":
+        return 4
+    return 0
+
+function diamondCount(p: player) :: number:
+    set {_n} to 0
+    loop all items in {_p}'s inventory:
+        if loop-item is diamond:
+            add item amount of loop-item to {_n}
+    return {_n}
+
+# Alle Rundendaten einer Arena-Welt löschen (Teamtruhe, Forge-Stufen, Upgrades, Smaragd-Zähler)
+function bwResetWorldData(w: world):
+    set {_pre} to "%name of {_w}%|"
+    loop {-bw::tcinv::*}:
+        if loop-index starts with {_pre}:
+            delete {-bw::tcinv::%loop-index%}
+    loop {-bw::tcloc::*}:
+        if loop-index starts with {_pre}:
+            delete {-bw::tcloc::%loop-index%}
+    # Einstufige Listen: nach Präfix löschen
+    loop {bw::forge::*}:
+        if loop-index starts with {_pre}:
+            delete {bw::forge::%loop-index%}
+    loop {bw::fcarry::*}:
+        if loop-index starts with {_pre}:
+            delete {bw::fcarry::%loop-index%}
+    # Zusätzlich direkt über alle bekannten Teamnamen löschen (sicher, auch bei verschachtelten Listen wie bw::up)
+    loop {-bw::preset::*}:
+        delete {bw::forge::%{_pre}%%loop-index%}
+        delete {bw::up::%{_pre}%%loop-index%::*}
+    loop {bw::tref::*}:
+        delete {bw::forge::%{_pre}%team%loop-index%}
+        delete {bw::up::%{_pre}%team%loop-index%::*}
+    # Smaragd-Zähler der Schmiede-Spawner dieser Welt auf 0
+    loop {bw::esp::*}:
+        if world of loop-value is {_w}:
+            delete {-bw::espc::%loop-index%}
+
+# Rundendaten einer Welt werden gelöscht, wenn die Welt mindestens 10 Sekunden lang leer war
+# (Fallback; zusätzlich setzt bwCheckEmpty sofort zurück, sobald der letzte Spieler die Welt verlässt).
+function bwSweepWorlds():
+    loop all worlds:
+        set {_n} to name of loop-world
+        if size of (all players in loop-world) is 0:
+            if {-bw::empty::%{_n}%} is not set:
+                set {-bw::empty::%{_n}%} to now
+            else if difference between {-bw::empty::%{_n}%} and now is greater than 10 seconds:
+                bwResetWorldData(loop-world)
+                delete {-bw::empty::%{_n}%}
+        else:
+            delete {-bw::empty::%{_n}%}
+
+# Setzt Schmiede, Upgrades und Teamtruhen einer Welt sofort zurück, sobald der letzte Spieler sie verlassen hat
+function bwCheckEmpty(leaver: player, exclude: boolean):
+    wait 2 seconds
+    loop all worlds:
+        set {_n} to 0
+        loop all players in loop-world:
+            if {_exclude} is true:
+                if loop-player is {_leaver}:
+                    continue
+            add 1 to {_n}
+        if {_n} is 0:
+            bwResetWorldData(loop-world)
+
+every 30 seconds:
+    bwSweepWorlds()
+
+# =========================================================
+# 1. REGENERATION (alle 4 Sekunden ein halbes Herz, nur Spieler im Spiel)
+# =========================================================
+# Natürliche Heilung (peaceful regeneration / satiated) wird gestoppt,
+# Tränke, Essen und Heal Pool bleiben erlaubt.
+on heal:
+    set {_r} to "%heal reason%"
+    if {_r} contains "peaceful" or "satiated":
+        cancel event
+
+every 4 seconds:
+    loop all players:
+        if gamemode of loop-player is survival:
+            if bwTeam(loop-player) is not "none":
+                if health of loop-player < max health of loop-player:
+                    heal loop-player by 0.5 hearts
+
+# =========================================================
+# 2. DROP-SPERRE IN DER LUFT
+# =========================================================
+on drop:
+    if player is not on ground:
+        set {_i} to event-item
+        if {_i} is iron ingot or gold ingot or emerald or diamond:
+            cancel event
+
+# =========================================================
+# 3. LANDSCHAFT SCHÜTZEN
+# =========================================================
+function isLandscape(b: block) :: boolean:
+    set {_m} to "%type of {_b}%"
+    if {_m} contains "end stone" or "cut sandstone" or "wool" or "planks" or "glass" or "packed ice" or "iron block" or "ladder" or "tnt" or "chest" or "bed":
+        return false
+    if {_m} contains "grass" or "dirt" or "podzol" or "mycelium" or "leaves" or "log" or "wood" or "sand" or "gravel" or "clay" or "snow" or "stone" or "cobble" or "andesite" or "diorite" or "granite" or "deepslate" or "ore" or "netherrack" or "flower" or "fern" or "vine" or "moss":
+        return true
+    return false
+
+# Glas ist gegen jede Explosion (TNT, Feuerball, TNT-Schaf, ...) immun
+on explode:
+    loop exploded blocks:
+        if "%type of loop-block%" contains "glass":
+            add loop-block to {_glass::*}
+    if size of {_glass::*} > 0:
+        remove {_glass::*} from exploded blocks
+
+# Feuerbälle zerstören keinen Endstein
+on explode:
+    if event-entity is a fireball or a small fireball:
+        loop exploded blocks:
+            if "%type of loop-block%" contains "end stone":
+                add loop-block to {_keep::*}
+        if size of {_keep::*} > 0:
+            remove {_keep::*} from exploded blocks
+
+on explode:
+    set {_pl} to "{@protect_landscape}"
+    if {_pl} is "true":
+        loop exploded blocks:
+            if isLandscape(loop-block) is true:
+                add loop-block to {_protect::*}
+        if size of {_protect::*} > 0:
+            remove {_protect::*} from exploded blocks
+
+# =========================================================
+# 4. WINDKANONE (30s Cooldown)
+# =========================================================
+# Eine ECHTE Wind Charge (normales Projektil-Entity, Vanilla-Aufprall und -Rückstoß).
+# Sie fliegt geradeaus. Taucht im 10-Block-Umkreis der FLIEGENDEN Charge ein Gegner auf,
+# wird ihre Flugrichtung laufend auf ihn gelenkt (nur die Flugbahn, kein künstlicher Knockback).
+# Kill-Gutschrift OHNE Schaden: Beim Aufprall (Windcharge bzw. Feuerball) merkt sich das Skript
+# den Schützen für Gegner im 4-Block-Umkreis. Stirbt so ein Gegner innerhalb von 10 Sekunden
+# ohne Spieler als Killer (Void, Fall), bekommt der Schütze Kill-Punkte und Statistik.
+function bwCreditHit(shooter: player, loc: location):
+    set {_myTeam} to bwTeam({_shooter})
+    loop all players in radius 4 around {_loc}:
+        if loop-player is not {_shooter}:
+            if gamemode of loop-player is survival:
+                set {_same} to false
+                if {_myTeam} is not "none":
+                    if bwTeam(loop-player) is {_myTeam}:
+                        set {_same} to true
+                if {_same} is false:
+                    set {-bw::cr::%uuid of loop-player%} to {_shooter}
+                    set {-bw::crt::%uuid of loop-player%} to now
+
+on death of player:
+    set {_u} to "%uuid of victim%"
+    if {-bw::cr::%{_u}%} is set:
+        set {_s} to {-bw::cr::%{_u}%}
+        set {_t} to {-bw::crt::%{_u}%}
+        delete {-bw::cr::%{_u}%}
+        delete {-bw::crt::%{_u}%}
+        if attacker is not a player:
+            if {_s} is online:
+                if difference between {_t} and now is less than 10 seconds:
+                    if {_s} is not victim:
+                        bwAddPoints({_s}, {@pts_kill}, "Kill")
+                        bwStatAdd({_s}, "kills", 1)
+                        send "&aDu hast &f%victim% &aausgeschaltet!" to {_s}
+
+on rightclick holding nautilus shell:
+    if "%name of player's tool%" contains "Windkanone":
+        cancel event
+        if {-bw::wk_cd::%uuid of player%} is set:
+            set {_waited} to difference between {-bw::wk_cd::%uuid of player%} and now
+            if {_waited} is less than 30 seconds:
+                stop
+        if player has 1 wind charge:
+            remove 1 wind charge from player's inventory
+            set {-bw::wk_cd::%uuid of player%} to now
+            set item cooldown of nautilus shell for player to 30 seconds
+            set {_shooter} to player
+            set {_myTeam} to bwTeam({_shooter})
+            set {_start} to location of {_shooter}
+            shoot a wind charge from {_shooter} at speed 1.4
+            set {_proj} to shot wind charge
+            set {-bwx::wkproj::%uuid of {_proj}%} to true
+            set {_last} to {_start}
+            loop 70 times:
+                if {_proj} is alive:
+                    set {_loc} to location of {_proj}
+                    set {_last} to {_loc}
+                    if (distance between {_start} and {_loc}) > 30:
+                        delete {_proj}
+                        stop
+                    draw cloud particle at {_loc}
+                    # Gegner im 10-Block-Umkreis der fliegenden Windcharge suchen (nächster gewinnt)
+                    delete {_target}
+                    set {_best} to 999
+                    loop all players in radius 10 around {_loc}:
+                        if loop-player is not {_shooter}:
+                            if gamemode of loop-player is survival:
+                                set {_same} to false
+                                if {_myTeam} is not "none":
+                                    if bwTeam(loop-player) is {_myTeam}:
+                                        set {_same} to true
+                                if {_same} is false:
+                                    set {_d} to distance between {_loc} and location of loop-player
+                                    if {_d} < {_best}:
+                                        set {_best} to {_d}
+                                        set {_target} to loop-player
+                    if {_target} is set:
+                        set {_want} to vector from {_loc} to ((location of {_target}) offset by vector(0, 1, 0))
+                        if vector length of {_want} > 0.05:
+                            set vector length of {_want} to 1.2
+                            set velocity of {_proj} to {_want}
+                    wait 1 tick
+                else:
+                    bwCreditHit({_shooter}, {_last})
+                    stop
+            delete {_proj}
+        else:
+            send "&cDu benötigst eine Wind Charge in deinem Inventar!" to player
+
+# =========================================================
+# 5. RETTUNGSPLATTFORM: KEIN FALLSCHADEN
+# =========================================================
+# SBW bricht den Rechtsklick selbst ab, deshalb wird der Verbrauch des Items erkannt.
+every 3 ticks:
+    loop all players:
+        if gamemode of loop-player is survival:
+            set {_c} to 0
+            loop all items in loop-player's inventory:
+                if "%name of loop-item%" contains "Rettungsplattform":
+                    add item amount of loop-item to {_c}
+            set {_o} to {-bw::rp_cnt::%uuid of loop-player%}
+            if {_o} is set:
+                if {_c} < {_o}:
+                    set {-bw::nofall::%uuid of loop-player%} to now
+                    set fall distance of loop-player to 0
+            set {-bw::rp_cnt::%uuid of loop-player%} to {_c}
+
+on damage of player:
+    if damage cause is fall:
+        if {-bw::nofall::%uuid of victim%} is set:
+            if difference between {-bw::nofall::%uuid of victim%} and now is less than 10 seconds:
+                cancel event
+
+# =========================================================
+# 6. UNSICHTBARKEIT
+# =========================================================
+on consume of potion:
+    set {_n} to "%name of event-item%"
+    if {_n} does not contain "Invisibility":
+        stop
+    set {_p} to player
+    if {bw::invis::%{_p}%} is not true:
+        set {bw::invis::%{_p}%} to true
+        set {bw::invis_armor::%{_p}%::helmet} to helmet of {_p}
+        set {bw::invis_armor::%{_p}%::chest} to chestplate of {_p}
+        set {bw::invis_armor::%{_p}%::leggings} to leggings of {_p}
+        set {bw::invis_armor::%{_p}%::boots} to boots of {_p}
+        set helmet of {_p} to air
+        set chestplate of {_p} to air
+        set leggings of {_p} to air
+        set boots of {_p} to air
+    apply invisibility 1 to {_p} for 30 seconds
+    add 1 to {bw::invis_token::%{_p}%}
+    set {_t} to {bw::invis_token::%{_p}%}
+    wait 30 seconds
+    if {bw::invis::%{_p}%} is true:
+        if {bw::invis_token::%{_p}%} is {_t}:
+            revealPlayer({_p})
+
+# leichte Partikel unter den Füßen (Skript-Effekt, keine Konsolen-Befehle)
+every 6 ticks:
+    loop all players:
+        if {bw::invis::%loop-player%} is true:
+            draw cloud particle at (location of loop-player) offset by vector(random number between -0.25 and 0.25, 0.1, random number between -0.25 and 0.25)
+
+# Enthüllungs-Falle (gibt Leuchten) löst Unsichtbarkeit auf
+every 5 ticks:
+    loop all players:
+        if {bw::invis::%loop-player%} is true:
+            if glowing of loop-player is true:
+                remove invisibility from loop-player
+                revealPlayer(loop-player)
+                send "&c&lENTHÜLLT! &7Eine Enthüllungs-Falle hat deine Unsichtbarkeit aufgelöst!" to loop-player
+
+on damage of player:
+    if {bw::invis::%victim%} is true:
+        remove invisibility from victim
+        send "&cDeine Unsichtbarkeit wurde durch Schaden aufgehoben!" to victim
+        revealPlayer(victim)
+
+function revealPlayer(p: player):
+    delete {bw::invis::%{_p}%}
+    set helmet of {_p} to {bw::invis_armor::%{_p}%::helmet}
+    set chestplate of {_p} to {bw::invis_armor::%{_p}%::chest}
+    set leggings of {_p} to {bw::invis_armor::%{_p}%::leggings}
+    set boots of {_p} to {bw::invis_armor::%{_p}%::boots}
+    delete {bw::invis_armor::%{_p}%::*}
+
+# =========================================================
+# 7. MOBILE TEAMTRUHE
+# =========================================================
+# Ein Teammitglied platziert die Kiste 1x pro Runde (die platzierte Kiste ist die
+# echte SBW-Team-Truhe "(BW) Team chest"). Sobald sie jemand öffnet, merkt sich das
+# Skript genau dieses Inventar. Danach öffnet jede "Mobile Teamtruhe" im Team von überall
+# DASSELBE Inventar. Nicht nutzbar über dem Void.
+on inventory open:
+    set {_p} to player
+    wait 1 tick
+    if "%name of {_p}'s current inventory%" contains "Team chest":
+        set {_t} to bwTeam({_p})
+        if {_t} is not "none":
+            set {_k} to bwKey({_p})
+            set {-bw::tcinv::%{_k}%} to {_p}'s current inventory
+
+function bwOpenTeamChest(p: player):
+    set {_t} to bwTeam({_p})
+    if {_t} is "none":
+        send "&cDu bist in keinem Team!" to {_p}
+        stop
+    if overVoid({_p}) is true:
+        send "&cÜber dem Void kannst du die Teamtruhe nicht benutzen!" to {_p}
+        stop
+    # 6 Sekunden Sperre, nachdem man Schaden bekommen hat
+    if {-bw::tc_dmg::%uuid of {_p}%} is set:
+        set {_since} to difference between {-bw::tc_dmg::%uuid of {_p}%} and now
+        if {_since} is less than 6 seconds:
+            set {_rem} to 6 seconds - {_since}
+            send "&cNach Schaden kannst du die Teamtruhe erst in %{_rem}% wieder öffnen!" to {_p}
+            stop
+    set {_k} to bwKey({_p})
+    if {-bw::tcloc::%{_k}%} is set:
+        if (block at {-bw::tcloc::%{_k}%}) is not ender chest:
+            # Truhe existiert nicht mehr (zerstört / neue Runde) -> vergessen
+            delete {-bw::tcloc::%{_k}%}
+            delete {-bw::tcinv::%{_k}%}
+    if {-bw::tcloc::%{_k}%} is not set:
+        send "&cEuer Team hat die Teamtruhe noch nicht platziert! (Schleichen + Rechtsklick auf einen Block)" to {_p}
+        stop
+    if {-bw::tcinv::%{_k}%} is not set:
+        send "&cÖffne die platzierte Teamtruhe einmal, danach geht es von überall." to {_p}
+        stop
+    if {-bw::tc_cd::%uuid of {_p}%} is set:
+        if difference between {-bw::tc_cd::%uuid of {_p}%} and now is less than 5 ticks:
+            stop
+    set {-bw::tc_cd::%uuid of {_p}%} to now
+    open {-bw::tcinv::%{_k}%} to {_p}
+    play sound "block.ender_chest.open" with volume 1 and pitch 1 to {_p}
+
+on rightclick:
+    if "%name of player's tool%" contains "Mobile Teamtruhe":
+        if player is sneaking:
+            if clicked block is set:
+                stop
+        cancel event
+        bwOpenTeamChest(player)
+
+on place of ender chest:
+    if "%name of player's tool%" contains "Mobile Teamtruhe":
+        set {_p} to player
+        if bwTeam({_p}) is "none":
+            cancel event
+            stop
+        if overVoid({_p}) is true:
+            cancel event
+            send "&cÜber dem Void kannst du die Teamtruhe nicht platzieren!" to {_p}
+            stop
+        set {_k} to bwKey({_p})
+        if {-bw::tcloc::%{_k}%} is set:
+            if (block at {-bw::tcloc::%{_k}%}) is not ender chest:
+                # alte Truhe existiert nicht mehr -> neue Runde / zerstört
+                delete {-bw::tcloc::%{_k}%}
+                delete {-bw::tcinv::%{_k}%}
+        if {-bw::tcloc::%{_k}%} is set:
+            cancel event
+            send "&cEure Teamtruhe wurde in dieser Runde schon platziert (nur 1x pro Team)!" to {_p}
+            stop
+        delete {-bw::tcinv::%{_k}%}
+        set {-bw::tcloc::%{_k}%} to location of event-block
+        send "&aTeamtruhe platziert! Das ganze Team nutzt dieselbe Truhe." to {_p}
+
+# Wird von SBW ausgeführt (config.yml -> rewards). Mit dem Zusatz "start" (Spielstart) ODER "end"
+# (Spielende) werden Teamtruhen, Kisten und Schmiede-Stufen der Arena zurückgesetzt. Ohne Zusatz
+# (Spieler-Events) wird die Schmiede NIE angefasst. Zusätzlich setzt /bwpoints join beim echten Spielstart zurück.
+command /bwroundstart [<text>] [<text>]:
+    permission: op
+    trigger:
+        if arg-1 is set:
+            set {_w} to world arg-1
+            # Arena-Name stimmt nicht exakt mit dem Weltnamen überein -> Welt über Namen suchen
+            if {_w} is not set:
+                loop all worlds:
+                    set {_wn} to name of loop-world in lowercase
+                    set {_an} to arg-1 in lowercase
+                    set {_hit} to false
+                    if {_wn} is {_an}:
+                        set {_hit} to true
+                    else if "%{_wn}%" contains {_an}:
+                        set {_hit} to true
+                    else if "%{_an}%" contains {_wn}:
+                        set {_hit} to true
+                    if {_hit} is true:
+                        set {_w} to loop-world
+                        exit loop
+            if {_w} is set:
+                # Golem / TNT-Schaf lassen sich im Peaceful-Modus nicht spawnen
+                set difficulty of {_w} to normal
+                if arg-2 is "start" or "end":
+                    bwResetWorldData({_w})
+                    loop all players in {_w}:
+                        delete {-bw::tc::%uuid of loop-player%}
+                    delete {-bw::gs::%name of {_w}%}
+                stop
+            else if arg-2 is "start" or "end":
+                # Welt nicht eindeutig gefunden -> sicherheitshalber alle Arena-Welten zurücksetzen
+                loop all worlds:
+                    if bwIsArena(loop-world) is true:
+                        bwResetWorldData(loop-world)
+                stop
+        bwSweepWorlds()
+
+# Setzt die Schwierigkeit DEINER aktuellen Welt auf "normal" (die server.properties gilt nur für die Hauptwelt)
+command /arenanormal:
+    permission: op
+    trigger:
+        set difficulty of world of player to normal
+        send "&aSchwierigkeit der Welt &f%name of world of player% &aist jetzt normal." to player
+
+command /resetteamchests:
+    permission: op
+    trigger:
+        loop all worlds:
+            bwResetWorldData(loop-world)
+        send "&aTeamtruhen, platzierte Kisten und Forge-Stufen wurden zurückgesetzt." to sender
+
+# Gibt dir die Brustplatte eines Teams (zum Ansehen der Farbe): /teamitem red | /teamitem team2
+command /teamitem <text>:
+    permission: op
+    trigger:
+        set {_k} to bwTeamAlias(arg-1)
+        if {-bw::preset::%{_k}%} is set:
+            give {-bw::preset::%{_k}%} to player
+            send "&aBrustplatte von Team &f%arg-1% &aerhalten." to player
+        else:
+            set {_a} to arg-1
+            replace all "team" with "" in {_a}
+            if {bw::tref::%{_a}%} is set:
+                give {bw::tref::%{_a}%} to player
+                send "&aBrustplatte von Team &f%arg-1% &aerhalten." to player
+            else:
+                send "&cUnbekanntes Team. Namen: black, blue, green, red, magenta, orange, light_gray, gray, light_blue, lime, cyan, pink, yellow, white, brown" to player
+
+command /resetteamcolors:
+    permission: op
+    trigger:
+        delete {bw::tref::*}
+        send "&aGelernte Teamfarben wurden gelöscht (werden beim nächsten Spiel neu gelernt)." to sender
+
+command /teamdebug:
+    permission: op
+    trigger:
+        send "&7Team-Kennung: &f%bwTeam(player)% &7(%bwTeamGerman(bwTeam(player))%)" to player
+        send "&7Teamtruhe platziert bei: &f%{-bw::tcloc::%bwKey(player)%}%" to player
+        send "&7Forge-Stufe deines Teams: &f%{bw::forge::%bwKey(player)%}%" to player
+
+# =========================================================
+# 8. FORGE: STUFEN NUR DER REIHE NACH KAUFBAR + SMARAGD-SPAWNER-SYSTEM
+# =========================================================
+on inventory click with priority lowest:
+    set {_ci} to event-item
+    if {_ci} is not set:
+        stop
+    set {_n} to "%name of {_ci}%"
+    if {_n} does not contain "Schmiede":
+        stop
+    set {_t} to bwTeam(player)
+    if {_t} is "none":
+        stop
+    set {_stage} to 1
+    if {_n} contains "Schmiede IV":
+        set {_stage} to 4
+    else if {_n} contains "Schmiede III":
+        set {_stage} to 3
+    else if {_n} contains "Schmiede II":
+        set {_stage} to 2
+    set {_k} to bwKey(player)
+    set {_cur} to {bw::forge::%{_k}%}
+    if {_cur} is not set:
+        set {_cur} to 0
+    if {_stage} is not ({_cur} + 1):
+        cancel event
+        if {_stage} <= {_cur}:
+            send "&cDiese Schmiede-Stufe habt ihr schon!" to player
+        else:
+            set {_need} to {_cur} + 1
+            send "&cKaufe zuerst Schmiede-Stufe %{_need}%!" to player
+        stop
+    set {_before} to diamondCount(player)
+    set {_p} to player
+    wait 3 ticks
+    if diamondCount({_p}) < {_before}:
+        set {bw::forge::%{_k}%} to {_stage}
+        # Die Schmiede-Stufen sind nur "Kauf-Items" -> aus dem Inventar entfernen,
+        # die Wirkung kommt komplett aus diesem Skript (Abschnitt 15)
+        loop all items in {_p}'s inventory:
+            if "%name of loop-item%" contains "Schmiede":
+                remove loop-item from {_p}'s inventory
+        if {_stage} is 1:
+            send "&aSchmiede I: Eure Iron- und Gold-Spawner liefern jetzt +50%%!" to {_p}
+        else if {_stage} is 2:
+            send "&aSchmiede II: Eure Iron- und Gold-Spawner liefern jetzt +100%%!" to {_p}
+        else if {_stage} is 3:
+            send "&aSchmiede III: Eure Smaragd-Spawner in der Base sind jetzt aktiv!" to {_p}
+        else:
+            send "&aSchmiede IV: Eure Iron- und Gold-Spawner liefern jetzt +200%%!" to {_p}
+
+# Merkt sich den echten Smaragd der Map-Spawner (grüner Name) als Vorlage,
+# damit die Schmiede-Smaragde exakt gleich aussehen und stacken.
+on pickup of emerald:
+    set {_n} to "%name of event-item%"
+    if {_n} contains "Emerald":
+        set {bw::emtemplate} to event-item
+        set item amount of {bw::emtemplate} to 1
+
+# Smaragd-Spawner: /emeraldspawner add <name> <team> | remove <name> | list
+# Team = Farbname (red, lime, pink, cyan ...), deutscher Teamname (Rot, Grün, Rosa, Türkis ...),
+# Kennung aus /teamdebug ODER der Name eines Spielers aus dem Team (online, mit Rüstung).
+# Stehe beim "add" an der Stelle, an der die Smaragde spawnen sollen.
+command /emeraldspawner [<text>] [<text>] [<text>]:
+    permission: op
+    usage: /emeraldspawner add <name> <team> | remove <name> | list | template
+    trigger:
+        if arg-1 is "add":
+            if sender is not a player:
+                send "&cNur als Spieler benutzbar!" to sender
+                stop
+            if arg-2 is not set:
+                send "&cNutzung: /emeraldspawner add <name> <team>" to sender
+                stop
+            if arg-3 is not set:
+                send "&cNutzung: /emeraldspawner add <name> <team>" to sender
+                stop
+            set {_team} to bwTeamAlias(arg-3)
+            set {_pp} to arg-3 parsed as player
+            if {_pp} is set:
+                set {_team} to bwTeam({_pp})
+            set {bw::esp::%arg-2%} to location of player
+            set {bw::espteam::%arg-2%} to {_team}
+            send "&aSmaragd-Spawner &f%arg-2% &afür Team &f%{_team}% &a(%bwTeamGerman({_team})%) gesetzt." to sender
+        else if arg-1 is "template":
+            if sender is not a player:
+                send "&cNur als Spieler benutzbar!" to sender
+                stop
+            if "%name of player's tool%" does not contain "Emerald":
+                send "&cHalte einen Smaragd aus einem Map-Spawner (grüner Name) in der Hand!" to sender
+                stop
+            set {bw::emtemplate} to player's tool
+            set item amount of {bw::emtemplate} to 1
+            send "&aSmaragd-Vorlage gespeichert. Schmiede-Smaragde sehen jetzt genauso aus." to sender
+        else if arg-1 is "remove":
+            if arg-2 is not set:
+                send "&cNutzung: /emeraldspawner remove <name>" to sender
+                stop
+            delete {bw::esp::%arg-2%}
+            delete {bw::espteam::%arg-2%}
+            send "&aSmaragd-Spawner &f%arg-2% &aentfernt." to sender
+        else if arg-1 is "list":
+            if size of {bw::esp::*} is 0:
+                send "&7Keine Smaragd-Spawner vorhanden." to sender
+                stop
+            loop {bw::esp::*}:
+                send "&7- &f%loop-index% &7(Team: &f%{bw::espteam::%loop-index%}% &7/ %bwTeamGerman({bw::espteam::%loop-index%})%) bei %loop-value%" to sender
+        else:
+            send "&cNutzung: /emeraldspawner add <name> <team> | remove <name> | list" to sender
+
+# Ab Schmiede Stufe 3 spawnt jeder Smaragd-Spawner des Teams Smaragde
+every 1 second:
+    loop {bw::esp::*}:
+        set {_name} to loop-index
+        set {_l} to loop-value
+        set {_key} to "%name of world of {_l}%|%{bw::espteam::%{_name}%}%"
+        set {_st} to {bw::forge::%{_key}%}
+        if {_st} is set:
+            if {_st} >= 3:
+                add 1 to {-bw::espc::%{_name}%}
+                set {_iv} to {@emerald_interval}
+                if {_st} >= 4:
+                    set {_iv} to {@emerald_interval_max}
+                if {-bw::espc::%{_name}%} >= {_iv}:
+                    set {-bw::espc::%{_name}%} to 0
+                    set {_it} to {bw::emtemplate}
+                    if {_it} is not set:
+                        set {_it} to emerald named "&aEmerald"
+                    drop {_it} at {_l} without velocity
+
+# =========================================================
+# 9. WERKZEUGE: PERMANENT, EINMAL KAUFBAR, HÖHERE ERSETZEN NIEDRIGERE
+# =========================================================
+on inventory click with priority lowest:
+    set {_ci} to event-item
+    if {_ci} is not set:
+        stop
+    if "%lore of {_ci}%" does not contain "Price":
+        stop
+    # Team-Upgrades (z.B. "Team Effizienz") sind keine Werkzeuge
+    if "%name of {_ci}%" contains "Team" or "Schmiede" or "Heal" or "Falle" or "Trap":
+        stop
+    # im Upgrade-Shop gibt es keine Werkzeuge (z.B. Abbaulähmung-Falle mit Spitzhacken-Symbol)
+    if "%name of player's current inventory%" contains "Upgrade":
+        stop
+    # Quickbuy-Edit-Modus: Item wird nur gespeichert, nicht gekauft -> nie blockieren
+    if bwQbEditing(player) is true:
+        stop
+    if {_ci} is shears:
+        if player has shears:
+            cancel event
+            send "&cDu besitzt bereits eine Schere!" to player
+            stop
+    set {_s} to "%type of {_ci}%"
+    if {_s} contains "pickaxe":
+        set {_best} to 0
+        loop all items in player's inventory:
+            if "%type of loop-item%" contains "pickaxe":
+                if toolTier(loop-item) > {_best}:
+                    set {_best} to toolTier(loop-item)
+        if (toolTier({_ci})) <= {_best}:
+            cancel event
+            send "&cDu besitzt bereits diese oder eine bessere Spitzhacke!" to player
+    else if {_s} contains "axe":
+        set {_best} to 0
+        loop all items in player's inventory:
+            if "%type of loop-item%" contains "axe":
+                if "%type of loop-item%" does not contain "pickaxe":
+                    if toolTier(loop-item) > {_best}:
+                        set {_best} to toolTier(loop-item)
+        if (toolTier({_ci})) <= {_best}:
+            cancel event
+            send "&cDu besitzt bereits diese oder eine bessere Axt!" to player
+
+# Stufen merken, niedrigere Stufen und Duplikate entfernen
+every 10 ticks:
+    loop all players:
+        if gamemode of loop-player is survival:
+            if bwTeam(loop-player) is not "none":
+                set {_bp} to 0
+                set {_ba} to 0
+                set {_sh} to false
+                loop all items in loop-player's inventory:
+                    set {_s} to "%type of loop-item%"
+                    if {_s} contains "pickaxe":
+                        if toolTier(loop-item) > {_bp}:
+                            set {_bp} to toolTier(loop-item)
+                    else if {_s} contains "axe":
+                        if toolTier(loop-item) > {_ba}:
+                            set {_ba} to toolTier(loop-item)
+                    else if loop-item is shears:
+                        set {_sh} to true
+                delete {_rm::*}
+                delete {_seenP}
+                delete {_seenA}
+                delete {_seenS}
+                loop all items in loop-player's inventory:
+                    set {_s} to "%type of loop-item%"
+                    if {_s} contains "pickaxe":
+                        if toolTier(loop-item) < {_bp}:
+                            add loop-item to {_rm::*}
+                        else if {_seenP} is set:
+                            add loop-item to {_rm::*}
+                        else:
+                            set {_seenP} to true
+                    else if {_s} contains "axe":
+                        if toolTier(loop-item) < {_ba}:
+                            add loop-item to {_rm::*}
+                        else if {_seenA} is set:
+                            add loop-item to {_rm::*}
+                        else:
+                            set {_seenA} to true
+                    else if loop-item is shears:
+                        if {_seenS} is set:
+                            add loop-item to {_rm::*}
+                        else:
+                            set {_seenS} to true
+                if size of {_rm::*} > 0:
+                    remove {_rm::*} from loop-player's inventory
+                set {-bw::tt::%uuid of loop-player%::pick} to {_bp}
+                set {-bw::tt::%uuid of loop-player%::axe} to {_ba}
+                set {-bw::tt::%uuid of loop-player%::shears} to {_sh}
+
+# Beim Tod: immer Holzspitzhacke + Holzaxt zurück (wenn vorher vorhanden), Schere bleibt
+on death of player:
+    set {_u} to uuid of victim
+    if {-bw::tt::%{_u}%::pick} > 0:
+        set {-bw::tr::%{_u}%::pick} to 1
+    if {-bw::tt::%{_u}%::axe} > 0:
+        set {-bw::tr::%{_u}%::axe} to 1
+    if {-bw::tt::%{_u}%::shears} is true:
+        set {-bw::tr::%{_u}%::shears} to true
+    set {-bw::tr::%{_u}%::time} to now
+
+every 10 ticks:
+    loop all players:
+        set {_u} to uuid of loop-player
+        if {-bw::tr::%{_u}%::time} is set:
+            if gamemode of loop-player is survival:
+                if difference between {-bw::tr::%{_u}%::time} and now is greater than 3 seconds:
+                    # alles andere (z.B. von SBA zurückgestufte Werkzeuge) entfernen, dann Holz geben
+                    loop all items in loop-player's inventory:
+                        set {_s} to "%type of loop-item%"
+                        if {_s} contains "pickaxe" or "axe":
+                            add loop-item to {_old::*}
+                    if size of {_old::*} > 0:
+                        remove {_old::*} from loop-player's inventory
+                    delete {_old::*}
+                    if {-bw::tr::%{_u}%::pick} is set:
+                        give wooden pickaxe to loop-player
+                    if {-bw::tr::%{_u}%::axe} is set:
+                        give wooden axe to loop-player
+                    if {-bw::tr::%{_u}%::shears} is true:
+                        if loop-player does not have shears:
+                            give shears to loop-player
+                    delete {-bw::tr::%{_u}%::*}
+                    set {-bw::tr_guard::%{_u}%} to now
+                    bwArrangeLater(loop-player)
+
+# Kurz nach dem Respawn: von SBA zurückgestufte Werkzeuge (Stein/Eisen/...) entfernen
+every 10 ticks:
+    loop all players:
+        set {_u} to uuid of loop-player
+        if {-bw::tr_guard::%{_u}%} is set:
+            if difference between {-bw::tr_guard::%{_u}%} and now is less than 5 seconds:
+                loop all items in loop-player's inventory:
+                    set {_s} to "%type of loop-item%"
+                    if {_s} contains "pickaxe" or "axe":
+                        if toolTier(loop-item) > 1:
+                            add loop-item to {_rm2::*}
+                if size of {_rm2::*} > 0:
+                    remove {_rm2::*} from loop-player's inventory
+                delete {_rm2::*}
+            else:
+                delete {-bw::tr_guard::%{_u}%}
+
+# =========================================================
+# 10. RESET BEIM LEAVEN
+# =========================================================
+on command "/bw leave":
+    bwCheckEmpty(player, true)
+    delete {bw::invis::%player%}
+    delete {bw::invis_armor::%player%::*}
+    delete {bw::invis_token::%player%}
+    delete {-bw::tt::%uuid of player%::*}
+    delete {-bw::tr::%uuid of player%::*}
+    delete {-bw::tc::%uuid of player%}
+
+on quit:
+    bwCheckEmpty(player, true)
+    delete {bw::invis::%player%}
+    delete {bw::invis_armor::%player%::*}
+    delete {bw::invis_token::%player%}
+    delete {-bw::tt::%uuid of player%::*}
+    delete {-bw::tr::%uuid of player%::*}
+    delete {-bw::tc::%uuid of player%}
+
+on world change:
+    bwCheckEmpty(player, false)
+    delete {bw::invis::%player%}
+    delete {bw::invis_armor::%player%::*}
+    delete {bw::invis_token::%player%}
+    delete {-bw::tt::%uuid of player%::*}
+    delete {-bw::tr::%uuid of player%::*}
+    delete {-bw::tc::%uuid of player%}
+
+# =========================================================
+# 11. QUICKSHOP (eigenes System, Klick auf freien Slot -> Menü mit allen Kategorien)
+# =========================================================
+# Auf der Shop-Hauptseite (Reihe 5 + 6) zeigt das Skript deine 14 Quickshop-Slots an.
+#  - freier Slot / Rechtsklick: öffnet ein Menü mit allen Kategorien, erst ein Klick auf ein Item legt es dort ab
+#  - Linksklick auf einen belegten Slot: kauft das Item
+# Der SBA-eigene Quickbuy wird dadurch nicht mehr benutzt (Klicks auf die Slots werden abgefangen).
+# Spezial-Items (TNT, Feuerball, Schaf, Golem, Plattform, Ei, Popup Tower, Tränke) werden beim ersten
+# normalen Kauf im Shop automatisch "gelernt" und stehen danach im Quickshop zur Verfügung.
+function bwRes(p: player, r: text) :: number:
+    set {_n} to 0
+    loop all items in {_p}'s inventory:
+        if "%type of loop-item%" contains {_r}:
+            add item amount of loop-item to {_n}
+    return {_n}
+
+# Quickshop-Slots in der Shop-Hauptseite: Reihe 5 (Slots 1-7) und Reihe 6 (Slots 8-14)
+function bwQbId(i: number) :: number:
+    loop 7 times:
+        if {_i} is (36 + loop-number):
+            return loop-number
+    loop 7 times:
+        if {_i} is (45 + loop-number):
+            return 7 + loop-number
+    return 0
+
+# (wird von Abschnitt 9 abgefragt; der Edit-Modus des SBA-Quickbuys wird nicht mehr genutzt)
+function bwQbEditing(p: player) :: boolean:
+    return false
+
+function bwTeamWool(t: text) :: item:
+    if {_t} is "red":
+        return red wool
+    if {_t} is "blue":
+        return blue wool
+    if {_t} is "yellow":
+        return yellow wool
+    if {_t} is "lime":
+        return lime wool
+    if {_t} is "green":
+        return green wool
+    if {_t} is "cyan":
+        return cyan wool
+    if {_t} is "pink":
+        return pink wool
+    if {_t} is "gray":
+        return gray wool
+    if {_t} is "light_gray":
+        return light gray wool
+    if {_t} is "orange":
+        return orange wool
+    if {_t} is "magenta":
+        return magenta wool
+    if {_t} is "light_blue":
+        return light blue wool
+    if {_t} is "black":
+        return black wool
+    if {_t} is "brown":
+        return brown wool
+    return white wool
+
+# Team-Upgrades (Schärfe / Effizienz) auf neu gekaufte Items anwenden
+function bwTeamEnch(i: item, p: player, kind: text) :: item:
+    set {_k} to bwKey({_p})
+    set {_lv} to {bw::up::%{_k}%::%{_kind}%}
+    if {_lv} > 0:
+        if {_kind} is "sharp":
+            if {_lv} >= 2:
+                enchant {_i} with sharpness 2
+            else:
+                enchant {_i} with sharpness 1
+        else:
+            if {_lv} >= 2:
+                enchant {_i} with efficiency 2
+            else:
+                enchant {_i} with efficiency 1
+    return {_i}
+
+# --- Preise, Kategorien, Namen (müssen zur shop.yml passen) ---
+function bwQsAmt(id: text) :: number:
+    if {_id} is "wool":
+        return 8
+    if {_id} is "packed_ice":
+        return 8
+    if {_id} is "glass":
+        return 24
+    if {_id} is "end_stone":
+        return 18
+    if {_id} is "planks":
+        return 4
+    if {_id} is "iron_block":
+        return 2
+    if {_id} is "ladder":
+        return 4
+    if {_id} is "stick":
+        return 5
+    if {_id} is "stone_sword":
+        return 10
+    if {_id} is "iron_sword":
+        return 7
+    if {_id} is "diamond_sword":
+        return 3
+    if {_id} is "bow":
+        return 12
+    if {_id} is "bow_power":
+        return 20
+    if {_id} is "bow_punch":
+        return 6
+    if {_id} is "arrow":
+        return 2
+    if {_id} is "wooden_pickaxe":
+        return 10
+    if {_id} is "stone_pickaxe":
+        return 2
+    if {_id} is "iron_pickaxe":
+        return 10
+    if {_id} is "wooden_axe":
+        return 10
+    if {_id} is "stone_axe":
+        return 3
+    if {_id} is "iron_axe":
+        return 10
+    if {_id} is "shears":
+        return 20
+    if {_id} is "potion_invisibility":
+        return 2
+    if {_id} is "potion_jump":
+        return 1
+    if {_id} is "potion_speed":
+        return 1
+    if {_id} is "golden_apple":
+        return 3
+    if {_id} is "ender_pearl":
+        return 4
+    if {_id} is "wind_charge":
+        return 3
+    if {_id} is "windkanone":
+        return 10
+    if {_id} is "teamchest":
+        return 6
+    if {_id} is "tnt":
+        return 64
+    if {_id} is "tnt_sheep":
+        return 64
+    if {_id} is "fireball":
+        return 40
+    if {_id} is "golem":
+        return 120
+    if {_id} is "bridge_egg":
+        return 1
+    if {_id} is "popup_tower":
+        return 24
+    if {_id} is "rescue_platform":
+        return 3
+    return 0
+
+function bwQsRes(id: text) :: text:
+    if {_id} is "wool":
+        return "iron ingot"
+    if {_id} is "packed_ice":
+        return "iron ingot"
+    if {_id} is "glass":
+        return "iron ingot"
+    if {_id} is "end_stone":
+        return "iron ingot"
+    if {_id} is "planks":
+        return "gold ingot"
+    if {_id} is "iron_block":
+        return "gold ingot"
+    if {_id} is "ladder":
+        return "iron ingot"
+    if {_id} is "stick":
+        return "gold ingot"
+    if {_id} is "stone_sword":
+        return "iron ingot"
+    if {_id} is "iron_sword":
+        return "gold ingot"
+    if {_id} is "diamond_sword":
+        return "emerald"
+    if {_id} is "bow":
+        return "gold ingot"
+    if {_id} is "bow_power":
+        return "gold ingot"
+    if {_id} is "bow_punch":
+        return "emerald"
+    if {_id} is "arrow":
+        return "gold ingot"
+    if {_id} is "wooden_pickaxe":
+        return "iron ingot"
+    if {_id} is "stone_pickaxe":
+        return "gold ingot"
+    if {_id} is "iron_pickaxe":
+        return "gold ingot"
+    if {_id} is "wooden_axe":
+        return "iron ingot"
+    if {_id} is "stone_axe":
+        return "gold ingot"
+    if {_id} is "iron_axe":
+        return "gold ingot"
+    if {_id} is "shears":
+        return "iron ingot"
+    if {_id} is "potion_invisibility":
+        return "emerald"
+    if {_id} is "potion_jump":
+        return "emerald"
+    if {_id} is "potion_speed":
+        return "emerald"
+    if {_id} is "golden_apple":
+        return "gold ingot"
+    if {_id} is "ender_pearl":
+        return "emerald"
+    if {_id} is "wind_charge":
+        return "gold ingot"
+    if {_id} is "windkanone":
+        return "gold ingot"
+    if {_id} is "teamchest":
+        return "gold ingot"
+    if {_id} is "tnt":
+        return "iron ingot"
+    if {_id} is "tnt_sheep":
+        return "iron ingot"
+    if {_id} is "fireball":
+        return "iron ingot"
+    if {_id} is "golem":
+        return "iron ingot"
+    if {_id} is "bridge_egg":
+        return "emerald"
+    if {_id} is "popup_tower":
+        return "iron ingot"
+    if {_id} is "rescue_platform":
+        return "emerald"
+    return "iron ingot"
+
+function bwQsCat(id: text) :: text:
+    if {_id} is "wool":
+        return "blocks"
+    if {_id} is "packed_ice":
+        return "blocks"
+    if {_id} is "glass":
+        return "blocks"
+    if {_id} is "end_stone":
+        return "blocks"
+    if {_id} is "planks":
+        return "blocks"
+    if {_id} is "iron_block":
+        return "blocks"
+    if {_id} is "ladder":
+        return "blocks"
+    if {_id} is "stick":
+        return "melee"
+    if {_id} is "stone_sword":
+        return "melee"
+    if {_id} is "iron_sword":
+        return "melee"
+    if {_id} is "diamond_sword":
+        return "melee"
+    if {_id} is "bow":
+        return "ranged"
+    if {_id} is "bow_power":
+        return "ranged"
+    if {_id} is "bow_punch":
+        return "ranged"
+    if {_id} is "arrow":
+        return "ranged"
+    if {_id} is "wooden_pickaxe":
+        return "tools"
+    if {_id} is "stone_pickaxe":
+        return "tools"
+    if {_id} is "iron_pickaxe":
+        return "tools"
+    if {_id} is "wooden_axe":
+        return "tools"
+    if {_id} is "stone_axe":
+        return "tools"
+    if {_id} is "iron_axe":
+        return "tools"
+    if {_id} is "shears":
+        return "tools"
+    if {_id} is "potion_invisibility":
+        return "potions"
+    if {_id} is "potion_jump":
+        return "potions"
+    if {_id} is "potion_speed":
+        return "potions"
+    if {_id} is "golden_apple":
+        return "utility"
+    if {_id} is "ender_pearl":
+        return "utility"
+    if {_id} is "wind_charge":
+        return "utility"
+    if {_id} is "windkanone":
+        return "utility"
+    if {_id} is "teamchest":
+        return "utility"
+    if {_id} is "tnt":
+        return "utility"
+    if {_id} is "tnt_sheep":
+        return "utility"
+    if {_id} is "fireball":
+        return "utility"
+    if {_id} is "golem":
+        return "utility"
+    if {_id} is "bridge_egg":
+        return "utility"
+    if {_id} is "popup_tower":
+        return "utility"
+    if {_id} is "rescue_platform":
+        return "utility"
+    return "none"
+
+function bwQsLabel(id: text) :: text:
+    if {_id} is "wool":
+        return "Wolle (16)"
+    if {_id} is "packed_ice":
+        return "Eis (4)"
+    if {_id} is "glass":
+        return "Glas (8)"
+    if {_id} is "end_stone":
+        return "Endstein (12)"
+    if {_id} is "planks":
+        return "Holzplanken (16)"
+    if {_id} is "iron_block":
+        return "Eisenblock"
+    if {_id} is "ladder":
+        return "Leiter (4)"
+    if {_id} is "stick":
+        return "Knockback Stick"
+    if {_id} is "stone_sword":
+        return "Steinschwert"
+    if {_id} is "iron_sword":
+        return "Eisenschwert"
+    if {_id} is "diamond_sword":
+        return "Diamantschwert"
+    if {_id} is "bow":
+        return "Bogen"
+    if {_id} is "bow_power":
+        return "Bogen (Power I)"
+    if {_id} is "bow_punch":
+        return "Bogen (Power I, Punch I)"
+    if {_id} is "arrow":
+        return "Pfeile (6)"
+    if {_id} is "wooden_pickaxe":
+        return "Holzspitzhacke"
+    if {_id} is "stone_pickaxe":
+        return "Steinspitzhacke"
+    if {_id} is "iron_pickaxe":
+        return "Eisenspitzhacke"
+    if {_id} is "wooden_axe":
+        return "Holzaxt"
+    if {_id} is "stone_axe":
+        return "Steinaxt"
+    if {_id} is "iron_axe":
+        return "Eisenaxt"
+    if {_id} is "shears":
+        return "Schere"
+    if {_id} is "potion_invisibility":
+        return "Invisibility-Trank"
+    if {_id} is "potion_jump":
+        return "Jump-Boost-Trank"
+    if {_id} is "potion_speed":
+        return "Speed-Trank"
+    if {_id} is "golden_apple":
+        return "Goldener Apfel"
+    if {_id} is "ender_pearl":
+        return "Enderperle"
+    if {_id} is "wind_charge":
+        return "Wind Charge"
+    if {_id} is "windkanone":
+        return "Windkanone"
+    if {_id} is "teamchest":
+        return "Mobile Teamtruhe"
+    if {_id} is "tnt":
+        return "TNT"
+    if {_id} is "tnt_sheep":
+        return "TNT-Schaf"
+    if {_id} is "fireball":
+        return "Feuerball"
+    if {_id} is "golem":
+        return "Golem"
+    if {_id} is "bridge_egg":
+        return "Brücken-Ei"
+    if {_id} is "popup_tower":
+        return "Popup Tower"
+    if {_id} is "rescue_platform":
+        return "Rettungsplattform"
+    return {_id}
+
+function bwQsItem(id: text, p: player) :: item:
+    if {_id} is "wool":
+        set {_i} to bwTeamWool(bwTeam({_p}))
+        set item amount of {_i} to 16
+        return {_i}
+    if {_id} is "packed_ice":
+        set {_i} to packed ice
+        set item amount of {_i} to 4
+        return {_i}
+    if {_id} is "glass":
+        set {_i} to glass
+        set item amount of {_i} to 8
+        return {_i}
+    if {_id} is "end_stone":
+        set {_i} to end stone
+        set item amount of {_i} to 12
+        return {_i}
+    if {_id} is "planks":
+        set {_i} to oak planks
+        set item amount of {_i} to 16
+        return {_i}
+    if {_id} is "iron_block":
+        set {_i} to iron block
+        return {_i}
+    if {_id} is "ladder":
+        set {_i} to ladder
+        set item amount of {_i} to 4
+        return {_i}
+    if {_id} is "stick":
+        set {_i} to stick named "&aKnockback Stick"
+        enchant {_i} with knockback 1
+        return {_i}
+    if {_id} is "stone_sword":
+        set {_i} to stone sword
+        return bwTeamEnch({_i}, {_p}, "sharp")
+    if {_id} is "iron_sword":
+        set {_i} to iron sword
+        return bwTeamEnch({_i}, {_p}, "sharp")
+    if {_id} is "diamond_sword":
+        set {_i} to diamond sword
+        return bwTeamEnch({_i}, {_p}, "sharp")
+    if {_id} is "bow":
+        set {_i} to bow
+        return {_i}
+    if {_id} is "bow_power":
+        set {_i} to bow
+        enchant {_i} with power 1
+        return {_i}
+    if {_id} is "bow_punch":
+        set {_i} to bow
+        enchant {_i} with power 1
+        enchant {_i} with punch 1
+        return {_i}
+    if {_id} is "arrow":
+        set {_i} to arrow
+        set item amount of {_i} to 6
+        return {_i}
+    if {_id} is "wooden_pickaxe":
+        set {_i} to wooden pickaxe
+        return bwTeamEnch({_i}, {_p}, "eff")
+    if {_id} is "stone_pickaxe":
+        set {_i} to stone pickaxe
+        return bwTeamEnch({_i}, {_p}, "eff")
+    if {_id} is "iron_pickaxe":
+        set {_i} to iron pickaxe
+        return bwTeamEnch({_i}, {_p}, "eff")
+    if {_id} is "wooden_axe":
+        set {_i} to wooden axe
+        return {_i}
+    if {_id} is "stone_axe":
+        set {_i} to stone axe
+        return {_i}
+    if {_id} is "iron_axe":
+        set {_i} to iron axe
+        return {_i}
+    if {_id} is "shears":
+        set {_i} to shears
+        return {_i}
+    if {_id} is "potion_invisibility":
+        return {bw::tpl::potion_invisibility}
+    if {_id} is "potion_jump":
+        return {bw::tpl::potion_jump}
+    if {_id} is "potion_speed":
+        return {bw::tpl::potion_speed}
+    if {_id} is "golden_apple":
+        set {_i} to golden apple
+        return {_i}
+    if {_id} is "ender_pearl":
+        set {_i} to "ender pearl" parsed as itemtype
+        return {_i}
+    if {_id} is "wind_charge":
+        set {_i} to wind charge
+        return {_i}
+    if {_id} is "windkanone":
+        set {_i} to nautilus shell named "&bWindkanone"
+        return {_i}
+    if {_id} is "teamchest":
+        set {_i} to ender chest named "&aMobile Teamtruhe"
+        return {_i}
+    if {_id} is "tnt":
+        return {bw::tpl::tnt}
+    if {_id} is "tnt_sheep":
+        return {bw::tpl::tnt_sheep}
+    if {_id} is "fireball":
+        return {bw::tpl::fireball}
+    if {_id} is "golem":
+        return {bw::tpl::golem}
+    if {_id} is "bridge_egg":
+        return {bw::tpl::bridge_egg}
+    if {_id} is "popup_tower":
+        return {bw::tpl::popup_tower}
+    if {_id} is "rescue_platform":
+        return {bw::tpl::rescue_platform}
+    return barrier
+
+function bwQsCatIds(c: text) :: texts:
+    if {_c} is "blocks":
+        return "wool", "packed_ice", "glass", "end_stone", "planks", "iron_block" and "ladder"
+    if {_c} is "melee":
+        return "stick", "stone_sword", "iron_sword" and "diamond_sword"
+    if {_c} is "ranged":
+        return "bow", "bow_power", "bow_punch" and "arrow"
+    if {_c} is "tools":
+        return "wooden_pickaxe", "stone_pickaxe", "iron_pickaxe", "wooden_axe", "stone_axe", "iron_axe" and "shears"
+    if {_c} is "potions":
+        return "potion_invisibility", "potion_jump" and "potion_speed"
+    if {_c} is "utility":
+        return "golden_apple", "ender_pearl", "wind_charge", "windkanone", "teamchest", "tnt", "tnt_sheep", "fireball", "golem", "bridge_egg", "popup_tower" and "rescue_platform"
+    return "none"
+
+function bwQsIcon(id: text, p: player) :: item:
+    if {bw::tpl::%{_id}%} is set:
+        return {bw::tpl::%{_id}%}
+    if {_id} is "tnt":
+        return tnt
+    if {_id} is "tnt_sheep":
+        return sheep spawn egg
+    if {_id} is "fireball":
+        return fire charge
+    if {_id} is "golem":
+        return ghast spawn egg
+    if {_id} is "bridge_egg":
+        return egg
+    if {_id} is "popup_tower":
+        return chest
+    if {_id} is "rescue_platform":
+        return blaze rod
+    if {_id} is "potion_invisibility":
+        return potion
+    if {_id} is "potion_jump":
+        return potion
+    if {_id} is "potion_speed":
+        return potion
+    if {_id} is "bow_power":
+        return bow
+    if {_id} is "bow_punch":
+        return bow
+    return bwQsItem({_id}, {_p})
+
+function bwQsPay(p: player, res: text, amt: number):
+    if {_res} is "iron ingot":
+        remove {_amt} of iron ingot from {_p}'s inventory
+    else if {_res} is "gold ingot":
+        remove {_amt} of gold ingot from {_p}'s inventory
+    else:
+        remove {_amt} of emerald from {_p}'s inventory
+
+# Besitz-Regeln (wie im normalen Shop): Schere nur 1x, Spitzhacke/Axt nur wenn besser
+function bwQsBlocked(p: player, id: text) :: text:
+    if {_id} is "shears":
+        if {_p} has shears:
+            return "Du besitzt bereits eine Schere!"
+    if {_id} contains "pickaxe":
+        set {_t} to 1
+        if {_id} contains "stone":
+            set {_t} to 2
+        if {_id} contains "iron":
+            set {_t} to 3
+        loop all items in {_p}'s inventory:
+            if "%type of loop-item%" contains "pickaxe":
+                if toolTier(loop-item) >= {_t}:
+                    return "Du besitzt bereits diese oder eine bessere Spitzhacke!"
+    else if {_id} contains "axe":
+        set {_t} to 1
+        if {_id} contains "stone":
+            set {_t} to 2
+        if {_id} contains "iron":
+            set {_t} to 3
+        loop all items in {_p}'s inventory:
+            if "%type of loop-item%" contains "axe":
+                if "%type of loop-item%" does not contain "pickaxe":
+                    if toolTier(loop-item) >= {_t}:
+                        return "Du besitzt bereits diese oder eine bessere Axt!"
+    return ""
+
+function bwQsBuy(p: player, id: text):
+    set {_blocked} to bwQsBlocked({_p}, {_id})
+    if {_blocked} is not "":
+        send action bar "&c%{_blocked}%" to {_p}
+        stop
+    set {_amt} to bwQsAmt({_id})
+    set {_res} to bwQsRes({_id})
+    if bwRes({_p}, {_res}) < {_amt}:
+        send action bar "&cNicht genug Ressourcen!" to {_p}
+        play sound "entity.villager.no" with volume 1 and pitch 1 to {_p}
+        stop
+    if {bw::tpl::%{_id}%} is not set:
+        if {_id} is "tnt" or "tnt_sheep" or "fireball" or "golem" or "bridge_egg" or "popup_tower" or "rescue_platform" or "potion_invisibility" or "potion_jump" or "potion_speed":
+            send action bar "&eDieses Item muss einmal normal im Shop gekauft werden, danach geht es im Quickshop." to {_p}
+            stop
+    set {_it} to bwQsItem({_id}, {_p})
+    bwQsPay({_p}, {_res}, {_amt})
+    give {_it} to {_p}
+    play sound "entity.item.pickup" with volume 1 and pitch 1 to {_p}
+    wait 2 ticks
+    bwArrange({_p})
+
+# --- Anzeige der Slots in der Shop-Hauptseite ---
+function bwQsRender(p: player):
+    set {_t} to "%name of {_p}'s current inventory%"
+    if {_t} does not contain "shop":
+        stop
+    set {_probe} to slot 37 of {_p}'s current inventory
+    if "%lore of {_probe}%" does not contain "Quickbuy-Slot":
+        stop
+    loop 14 times:
+        set {_q} to loop-number
+        set {_idx} to 36 + {_q}
+        if {_q} > 7:
+            set {_idx} to 38 + {_q}
+        set {_id} to {bw::qb::%uuid of {_p}%::%{_q}%}
+        if {_id} is set:
+            set {_x} to bwQsIcon({_id}, {_p})
+            set lore of {_x} to "&7Preis: &f%bwQsAmt({_id})% %bwQsRes({_id})%" and "&aLinksklick: kaufen &8| &eRechtsklick: ändern" and "&8Quickbuy-Slot #%{_q}%"
+        else:
+            set {_x} to red stained glass pane named "&cLeerer Quickbuy-Slot"
+            set lore of {_x} to "&7Klicke, um ein Item auszuwählen." and "&8Quickbuy-Slot #%{_q}%"
+        set slot {_idx} of {_p}'s current inventory to {_x}
+
+on inventory open:
+    set {_p} to player
+    wait 3 ticks
+    bwQsRender({_p})
+
+on inventory click:
+    set {_p} to player
+    if "%name of {_p}'s current inventory%" contains "shop":
+        wait 3 ticks
+        bwQsRender({_p})
+
+# --- Auswahl-Menüs: erst Kategorien, dann Items ---
+function bwQsOpenCats(p: player):
+    delete {-bw::qsmap::%uuid of {_p}%::*}
+    set {_inv} to chest inventory with 3 rows named "&8Quickshop: Kategorie"
+    set {_x} to white wool named "&aBlöcke"
+    set lore of {_x} to "&7Klicken, um Items dieser Kategorie zu sehen"
+    set slot 10 of {_inv} to {_x}
+    set {-bw::qsmap::%uuid of {_p}%::10} to "cat_blocks"
+    set {_x} to golden sword named "&aNahkampf"
+    set lore of {_x} to "&7Klicken, um Items dieser Kategorie zu sehen"
+    set slot 11 of {_inv} to {_x}
+    set {-bw::qsmap::%uuid of {_p}%::11} to "cat_melee"
+    set {_x} to bow named "&aFernkampf"
+    set lore of {_x} to "&7Klicken, um Items dieser Kategorie zu sehen"
+    set slot 12 of {_inv} to {_x}
+    set {-bw::qsmap::%uuid of {_p}%::12} to "cat_ranged"
+    set {_x} to stone pickaxe named "&aWerkzeuge"
+    set lore of {_x} to "&7Klicken, um Items dieser Kategorie zu sehen"
+    set slot 13 of {_inv} to {_x}
+    set {-bw::qsmap::%uuid of {_p}%::13} to "cat_tools"
+    set {_x} to brewing stand named "&aTränke"
+    set lore of {_x} to "&7Klicken, um Items dieser Kategorie zu sehen"
+    set slot 14 of {_inv} to {_x}
+    set {-bw::qsmap::%uuid of {_p}%::14} to "cat_potions"
+    set {_x} to tnt named "&aSpezial"
+    set lore of {_x} to "&7Klicken, um Items dieser Kategorie zu sehen"
+    set slot 15 of {_inv} to {_x}
+    set {-bw::qsmap::%uuid of {_p}%::15} to "cat_utility"
+    set {_x} to arrow named "&7Zurück zum Shop"
+    set slot 22 of {_inv} to {_x}
+    set {-bw::qsmap::%uuid of {_p}%::22} to "shop"
+    open {_inv} to {_p}
+
+function bwQsOpenItems(p: player, c: text):
+    delete {-bw::qsmap::%uuid of {_p}%::*}
+    set {_inv} to chest inventory with 4 rows named "&8Quickshop: Item wählen"
+    set {_n} to 0
+    loop bwQsCatIds({_c}):
+        set {_id} to loop-value
+        set {_x} to bwQsIcon({_id}, {_p})
+        set name of {_x} to "&a%bwQsLabel({_id})%"
+        set lore of {_x} to "&7Preis: &f%bwQsAmt({_id})% %bwQsRes({_id})%" and "&eKlicken, um das Item in den Slot zu legen"
+        set slot {_n} of {_inv} to {_x}
+        set {-bw::qsmap::%uuid of {_p}%::%{_n}%} to {_id}
+        add 1 to {_n}
+    set {_x} to arrow named "&7Zurück"
+    set slot 31 of {_inv} to {_x}
+    set {-bw::qsmap::%uuid of {_p}%::31} to "cats"
+    open {_inv} to {_p}
+
+# Klick auf einen Quickshop-Slot in der Shop-Hauptseite
+on inventory click with priority lowest:
+    set {_ci} to event-item
+    if {_ci} is not set:
+        stop
+    if "%lore of {_ci}%" does not contain "Quickbuy-Slot":
+        stop
+    if "%name of player's current inventory%" does not contain "shop":
+        stop
+    cancel event
+    set {_p} to player
+    set {_qs} to 0
+    loop 54 times:
+        if clicked slot is (loop-number - 1):
+            set {_qs} to bwQbId(loop-number - 1)
+    if {_qs} is 0:
+        stop
+    set {_id} to {bw::qb::%uuid of {_p}%::%{_qs}%}
+    if {_id} is set:
+        if click type is left mouse button or left mouse button with shift:
+            bwQsBuy({_p}, {_id})
+            stop
+    set {-bw::qs_slot::%uuid of {_p}%} to {_qs}
+    set {-bw::qs_inv::%uuid of {_p}%} to {_p}'s current inventory
+    wait 1 tick
+    bwQsOpenCats({_p})
+
+# Klicks in den Auswahl-Menüs
+on inventory click:
+    set {_t} to "%name of player's current inventory%"
+    if {_t} contains "Quickshop: Kategorie" or "Quickshop: Item":
+        cancel event
+        set {_p} to player
+        set {_u} to uuid of {_p}
+        set {_key} to "none"
+        loop 54 times:
+            set {_s} to loop-number - 1
+            if clicked slot is {_s}:
+                if {-bw::qsmap::%{_u}%::%{_s}%} is set:
+                    set {_key} to {-bw::qsmap::%{_u}%::%{_s}%}
+        if {_key} is "none":
+            stop
+        if {_key} is "shop" or "cats":
+            wait 1 tick
+            if {_key} is "shop":
+                open {-bw::qs_inv::%{_u}%} to {_p}
+                wait 3 ticks
+                bwQsRender({_p})
+            else:
+                bwQsOpenCats({_p})
+            stop
+        if {_key} starts with "cat_":
+            set {_c} to {_key}
+            replace all "cat_" with "" in {_c}
+            wait 1 tick
+            bwQsOpenItems({_p}, {_c})
+            stop
+        # ein Item wurde gewählt -> in den Slot legen und zurück zum Shop
+        set {_slot} to {-bw::qs_slot::%{_u}%}
+        if {_slot} is not set:
+            stop
+        set {bw::qb::%{_u}%::%{_slot}%} to {_key}
+        send "&aQuickshop-Slot &f%{_slot}% &a= &f%bwQsLabel({_key})%" to {_p}
+        wait 1 tick
+        open {-bw::qs_inv::%{_u}%} to {_p}
+        wait 3 ticks
+        bwQsRender({_p})
+
+# Spezial-Items beim ersten normalen Kauf "lernen" (damit sie im Quickshop kaufbar sind)
+on inventory click with priority lowest:
+    set {_ci} to event-item
+    if {_ci} is not set:
+        stop
+    if "%lore of {_ci}%" does not contain "Price":
+        stop
+    if "%lore of {_ci}%" contains "Quickbuy-Slot":
+        stop
+    set {_id0} to bwItemId({_ci})
+    set {_want} to false
+    if {_id0} is "tnt" or "tnt_sheep" or "fireball" or "golem" or "bridge_egg" or "popup_tower" or "rescue_platform" or "potion_invisibility" or "potion_jump" or "potion_speed":
+        set {_want} to true
+    if {_want} is false:
+        stop
+    if {bw::tpl::%{_id0}%} is set:
+        stop
+    set {_p} to player
+    loop 36 times:
+        set {_i} to loop-number - 1
+        set {_b::%{_i}%} to "%slot {_i} of {_p}'s inventory%"
+    wait 3 ticks
+    loop 36 times:
+        set {_i} to loop-number - 1
+        if "%slot {_i} of {_p}'s inventory%" is not {_b::%{_i}%}:
+            set {_n} to slot {_i} of {_p}'s inventory
+            if {_n} is not air:
+                if bwItemId({_n}) is {_id0}:
+                    set {bw::tpl::%{_id0}%} to {_n}
+                    set item amount of {bw::tpl::%{_id0}%} to 1
+                    exit loop
+
+# Team-Upgrades merken (Schärfe / Effizienz), damit Quickshop-Items sie bekommen
+on inventory click with priority lowest:
+    set {_ci} to event-item
+    if {_ci} is not set:
+        stop
+    set {_n} to "%name of {_ci}%"
+    set {_kind} to "none"
+    if {_n} contains "Schärfe":
+        set {_kind} to "sharp"
+    else if {_n} contains "Effizienz":
+        set {_kind} to "eff"
+    if {_kind} is "none":
+        stop
+    set {_p} to player
+    set {_k} to bwKey({_p})
+    set {_before} to diamondCount({_p})
+    wait 3 ticks
+    if diamondCount({_p}) < {_before}:
+        add 1 to {bw::up::%{_k}%::%{_kind}%}
+
+# =========================================================
+# 12. HOTBAR-EINSTELLUNGEN: /settings
+# =========================================================
+# Für jedes einzelne Item, jede Unterkategorie (Schwerter, Äxte, ...) und jede Hauptkategorie
+# (Waffen, Werkzeuge, ...) kann ein Hotbar-Slot (1-9) gewählt werden.
+# Gruppen belegen ab dem gewählten Slot fortlaufend Slots (z.B. Werkzeuge ab Slot 4:
+# Spitzhacke 4, Axt 5, Schere 6). Vorrang: Einzelnes Item > Unterkategorie > Hauptkategorie.
+# Sortiert wird nach jedem Kauf im Shop, nach jedem Respawn und über /settings -> "Jetzt sortieren".
+# Liegt ein anderes Item im Weg, wird es in einen freien Inventarplatz verschoben.
+function bwItemId(i: item) :: text:
+    set {_n} to "%type of {_i}%"
+    if {_n} contains "potion" or "bottle":
+        set {_nm} to "%name of {_i}%"
+        if {_nm} contains "Invisib":
+            return "potion_invisibility"
+        if {_nm} contains "Jump":
+            return "potion_jump"
+        if {_nm} contains "Speed":
+            return "potion_speed"
+        return "none"
+    if {_n} contains "stained glass pane":
+        return "none"
+    if {_n} contains "wool":
+        return "wool"
+    if {_n} contains "glass":
+        return "glass"
+    if {_n} contains "sheep spawn egg":
+        return "tnt_sheep"
+    if {_n} contains "ghast spawn egg":
+        return "golem"
+    if {_n} contains "spawn egg":
+        return "none"
+    if {_n} contains "boots" or "helmet" or "chestplate" or "leggings":
+        return "none"
+    if {_n} contains "ender chest":
+        return "teamchest"
+    if {_n} contains "chest":
+        return "popup_tower"
+    if {_n} contains "nautilus":
+        return "windkanone"
+    if {_n} contains "blaze rod":
+        return "rescue_platform"
+    if {_n} contains "fire charge":
+        return "fireball"
+    if {_n} contains "planks":
+        return "planks"
+    if {_n} is "egg":
+        return "bridge_egg"
+    replace all " " with "_" in {_n}
+    return {_n}
+
+# Unterkategorie eines Items (für /settings -> Unterkategorien)
+function bwSub(id: text) :: text:
+    if {_id} contains "pickaxe":
+        return "pickaxes"
+    if {_id} contains "axe":
+        return "axes"
+    if {_id} contains "sword":
+        return "swords"
+    if {_id} is "stick":
+        return "swords"
+    if {_id} is "bow":
+        return "bows"
+    if {_id} is "arrow":
+        return "arrows"
+    if {_id} is "shears":
+        return "shears"
+    if {_id} is "wool" or "planks" or "end_stone" or "glass" or "packed_ice" or "ladder" or "iron_block":
+        return "blocks"
+    if {_id} starts with "potion_":
+        return "potions"
+    if {_id} is "golden_apple":
+        return "food"
+    if {_id} is "tnt" or "tnt_sheep" or "fireball":
+        return "explosives"
+    if {_id} is "ender_pearl" or "wind_charge" or "windkanone" or "rescue_platform" or "bridge_egg":
+        return "mobility"
+    if {_id} is "teamchest" or "golem" or "popup_tower":
+        return "special"
+    return "none"
+
+# Hauptkategorie einer Unterkategorie (entspricht den Shop-Kategorien)
+function bwCat(sub: text) :: text:
+    if {_sub} is "swords" or "bows" or "arrows":
+        return "melee"
+    if {_sub} is "pickaxes" or "axes" or "shears":
+        return "tools"
+    if {_sub} is "blocks":
+        return "blocks"
+    if {_sub} is "potions":
+        return "potions"
+    if {_sub} is "food" or "explosives" or "mobility" or "special":
+        return "utility"
+    return "none"
+
+# feste Reihenfolge, in der Gruppen-Items nacheinander einsortiert werden
+function bwAllIds() :: texts:
+    return "wooden_sword", "stone_sword", "iron_sword", "diamond_sword", "stick", "bow", "arrow", "wooden_pickaxe", "stone_pickaxe", "iron_pickaxe", "wooden_axe", "stone_axe", "iron_axe", "shears", "wool", "planks", "end_stone", "glass", "packed_ice", "ladder", "iron_block", "golden_apple", "tnt", "tnt_sheep", "fireball", "ender_pearl", "wind_charge", "windkanone", "rescue_platform", "teamchest", "golem", "bridge_egg", "popup_tower", "potion_invisibility", "potion_jump" and "potion_speed"
+
+# gewählter Hotbar-Slot (1-9) für einen Schlüssel, 0 = automatisch
+function bwPref(p: player, k: text) :: number:
+    set {_v} to {bw::islot::%uuid of {_p}%::%{_k}%}
+    if {_v} is set:
+        return {_v}
+    return 0
+
+# erster freier Inventarplatz: erst das Hauptinventar (9-35), dann die Hotbar (0-8); -1 = voll
+function bwFreeSlot(p: player) :: number:
+    loop 27 times:
+        set {_s} to loop-number + 8
+        set {_x} to slot {_s} of {_p}'s inventory
+        if {_x} is air:
+            return {_s}
+    loop 9 times:
+        set {_s} to loop-number - 1
+        set {_x} to slot {_s} of {_p}'s inventory
+        if {_x} is air:
+            return {_s}
+    return -1
+
+function bwArrange(p: player):
+    if {_p} is not online:
+        stop
+    set {_u} to uuid of {_p}
+    delete {_idv::*}
+    delete {_tgt::*}
+    delete {_taken::*}
+    delete {_lift::*}
+    delete {_order::*}
+    # 1. Items erfassen
+    set {_i} to 0
+    while {_i} < 36:
+        set {_it} to slot {_i} of {_p}'s inventory
+        if {_it} is not air:
+            set {_idv::%{_i}%} to bwItemId({_it})
+        add 1 to {_i}
+    # 2. einzelne Items (höchster Vorrang)
+    set {_i} to 0
+    while {_i} < 36:
+        set {_id} to {_idv::%{_i}%}
+        if {_id} is set:
+            if {_id} is not "none":
+                set {_pr} to bwPref({_p}, {_id})
+                if {_pr} > 0:
+                    set {_t} to {_pr} - 1
+                    if {_taken::%{_t}%} is not set:
+                        set {_tgt::%{_i}%} to {_t}
+                        set {_taken::%{_t}%} to true
+        add 1 to {_i}
+    # 3. Gruppen: erst Unterkategorien (Stufe 1), dann Hauptkategorien (Stufe 2)
+    set {_order::*} to bwAllIds()
+    set {_i} to 0
+    while {_i} < 36:
+        set {_id} to {_idv::%{_i}%}
+        if {_id} is set:
+            if {_id} is not "none":
+                if {_order::*} does not contain {_id}:
+                    add {_id} to {_order::*}
+        add 1 to {_i}
+    set {_lvl} to 1
+    while {_lvl} <= 2:
+        set {_oi} to 1
+        while {_oi} <= size of {_order::*}:
+            set {_oid} to {_order::%{_oi}%}
+            set {_i} to 0
+            while {_i} < 36:
+                if {_idv::%{_i}%} is {_oid}:
+                    if {_tgt::%{_i}%} is not set:
+                        set {_sb} to bwSub({_oid})
+                        if {_lvl} is 1:
+                            set {_pr} to bwPref({_p}, "sub_%{_sb}%")
+                        else:
+                            set {_pr} to bwPref({_p}, "cat_%bwCat({_sb})%")
+                        if {_pr} > 0:
+                            set {_k} to 0
+                            while {_k} < 9:
+                                set {_t} to ({_pr} - 1) + {_k}
+                                if {_t} > 8:
+                                    subtract 9 from {_t}
+                                if {_taken::%{_t}%} is not set:
+                                    set {_tgt::%{_i}%} to {_t}
+                                    set {_taken::%{_t}%} to true
+                                    set {_k} to 99
+                                else:
+                                    add 1 to {_k}
+                add 1 to {_i}
+            add 1 to {_oi}
+        add 1 to {_lvl}
+    # 4. alle Items, die umziehen müssen, aus dem Inventar nehmen
+    set {_i} to 0
+    while {_i} < 36:
+        if {_tgt::%{_i}%} is set:
+            if {_tgt::%{_i}%} is not {_i}:
+                set {_lift::%{_i}%} to slot {_i} of {_p}'s inventory
+                set slot {_i} of {_p}'s inventory to air
+        add 1 to {_i}
+    # 5. auf den Zielslots ablegen; liegt dort etwas anderes, wandert es in einen freien Platz
+    set {_t} to 0
+    while {_t} < 9:
+        set {_i} to 0
+        while {_i} < 36:
+            if {_lift::%{_i}%} is set:
+                if {_tgt::%{_i}%} is {_t}:
+                    set {_cur} to slot {_t} of {_p}'s inventory
+                    if {_cur} is not air:
+                        set {_f} to bwFreeSlot({_p})
+                        if {_f} < 0:
+                            set {_f} to {_i}
+                        set slot {_f} of {_p}'s inventory to {_cur}
+                    set slot {_t} of {_p}'s inventory to {_lift::%{_i}%}
+                    delete {_lift::%{_i}%}
+            add 1 to {_i}
+        add 1 to {_t}
+
+function bwArrangeLater(p: player):
+    wait 5 ticks
+    bwArrange({_p})
+    # zweiter Durchgang, falls SBW/SBA danach noch Start-Items gibt
+    wait 20 ticks
+    bwArrange({_p})
+
+# Nach jedem Respawn sortieren
+on respawn:
+    bwArrangeLater(player)
+
+# ---------------------------------------------------------
+# Menüs
+# ---------------------------------------------------------
+function bwSetEntry(inv: inventory, s: number, id: text, icon: item, label: text, p: player):
+    set {_cur} to {bw::islot::%uuid of {_p}%::%{_id}%}
+    if {_cur} is not set:
+        set {_cur} to "automatisch"
+    set {_x} to {_icon}
+    set name of {_x} to {_label}
+    set lore of {_x} to "&7Slot: &f%{_cur}% &8| &eKlicken zum Ändern"
+    set slot {_s} of {_inv} to {_x}
+    set {-bw::setmap::%uuid of {_p}%::%{_s}%} to {_id}
+    set {-bw::setlbl::%uuid of {_p}%::%{_s}%} to {_label}
+
+# Gruppen-Eintrag: label = Name, desc = Inhalt (steht grau hinter dem Namen)
+function bwSetGroup(inv: inventory, s: number, key: text, icon: item, label: text, desc: text, p: player):
+    set {_cur} to {bw::islot::%uuid of {_p}%::%{_key}%}
+    if {_cur} is not set:
+        set {_cur} to "automatisch"
+    set {_x} to {_icon}
+    set name of {_x} to "%{_label}% &8(%{_desc}%)"
+    set lore of {_x} to "&7Startslot: &f%{_cur}% &8| &eKlicken zum Ändern"
+    set slot {_s} of {_inv} to {_x}
+    set {-bw::setmap::%uuid of {_p}%::%{_s}%} to {_key}
+    set {-bw::setlbl::%uuid of {_p}%::%{_s}%} to {_label}
+
+function bwBackButton(inv: inventory, s: number, p: player):
+    set {_x} to arrow named "&7Zurück"
+    set slot {_s} of {_inv} to {_x}
+    set {-bw::setmap::%uuid of {_p}%::%{_s}%} to "back"
+
+function bwIcon(id: text) :: item:
+    if {_id} is "wooden_sword":
+        return wooden sword
+    if {_id} is "stone_sword":
+        return stone sword
+    if {_id} is "iron_sword":
+        return iron sword
+    if {_id} is "diamond_sword":
+        return diamond sword
+    if {_id} is "stick":
+        return stick
+    if {_id} is "bow":
+        return bow
+    if {_id} is "arrow":
+        return arrow
+    if {_id} is "wooden_pickaxe":
+        return wooden pickaxe
+    if {_id} is "stone_pickaxe":
+        return stone pickaxe
+    if {_id} is "iron_pickaxe":
+        return iron pickaxe
+    if {_id} is "wooden_axe":
+        return wooden axe
+    if {_id} is "stone_axe":
+        return stone axe
+    if {_id} is "iron_axe":
+        return iron axe
+    if {_id} is "shears":
+        return shears
+    if {_id} is "planks":
+        return oak planks
+    if {_id} is "end_stone":
+        return end stone
+    if {_id} is "glass":
+        return glass
+    if {_id} is "packed_ice":
+        return packed ice
+    if {_id} is "ladder":
+        return ladder
+    if {_id} is "iron_block":
+        return iron block
+    if {_id} is "golden_apple":
+        return golden apple
+    if {_id} is "ender_pearl":
+        return ender pearl
+    if {_id} is "wind_charge":
+        return wind charge
+    if {_id} is "windkanone":
+        return nautilus shell
+    if {_id} is "teamchest":
+        return ender chest
+    if {_id} is "potion_invisibility" or "potion_jump" or "potion_speed":
+        return potion
+    return barrier
+
+function openQuickshopMenu(p: player):
+    delete {-bw::setmap::%uuid of {_p}%::*}
+    delete {-bw::setlbl::%uuid of {_p}%::*}
+    set {_inv} to chest inventory with 4 rows named "&8Hotbar: Quickshop"
+    set {_x} to book named "&eSo änderst du deinen Quickshop"
+    set lore of {_x} to "&7Im Item-Shop auf einen freien Quickshop-Slot klicken, ein Item wählen. Hier kannst du Slots leeren."
+    set slot 4 of {_inv} to {_x}
+    loop 14 times:
+        set {_q} to loop-number
+        set {_s} to 9 + {_q}
+        if {_q} > 7:
+            set {_s} to 11 + {_q}
+        set {_id} to {bw::qb::%uuid of {_p}%::%{_q}%}
+        if {_id} is not set:
+            set {_x} to red stained glass pane named "&cQuickshop-Slot %{_q}% (leer)"
+            set lore of {_x} to "&7Im Shop: Rechtsklick auf Slot %{_q}%, dann ein Item anklicken."
+        else:
+            set {_x} to bwQsIcon({_id}, {_p})
+            set name of {_x} to "&aQuickshop-Slot %{_q}%"
+            set lore of {_x} to "&7Item: &f%bwQsLabel({_id})% &8| &eKlicken: Slot leeren"
+        set slot {_s} of {_inv} to {_x}
+        set {-bw::setmap::%uuid of {_p}%::%{_s}%} to "qs_%{_q}%"
+    bwBackButton({_inv}, 31, {_p})
+    open {_inv} to {_p}
+
+function openSettingsHome(p: player):
+    delete {-bw::setmap::%uuid of {_p}%::*}
+    delete {-bw::setlbl::%uuid of {_p}%::*}
+    set {_inv} to chest inventory with 3 rows named "&8Hotbar: Menü"
+    set {_x} to hopper named "&aSortierung"
+    set lore of {_x} to "&7Hotbar-Slots für Items, Unterkategorien und Kategorien"
+    set slot 11 of {_inv} to {_x}
+    set {-bw::setmap::%uuid of {_p}%::11} to "home_sort"
+    set {_x} to nether star named "&aQuickshop"
+    set lore of {_x} to "&7Deine Quickshop-Slots ansehen und bearbeiten"
+    set slot 15 of {_inv} to {_x}
+    set {-bw::setmap::%uuid of {_p}%::15} to "home_qs"
+    open {_inv} to {_p}
+
+function openSettingsMain(p: player):
+    delete {-bw::setmap::%uuid of {_p}%::*}
+    delete {-bw::setlbl::%uuid of {_p}%::*}
+    set {_inv} to chest inventory with 3 rows named "&8Hotbar: Einstellungen"
+    set {_x} to iron sword named "&aEinzelne Items"
+    set lore of {_x} to "&7Jedes Item bekommt einen eigenen Hotbar-Slot."
+    set slot 10 of {_inv} to {_x}
+    set {-bw::setmap::%uuid of {_p}%::10} to "main_items"
+    set {_x} to iron pickaxe named "&aUnterkategorien"
+    set lore of {_x} to "&7Schwerter, Äxte, Spitzhacken, Bögen, Blöcke ..."
+    set slot 12 of {_inv} to {_x}
+    set {-bw::setmap::%uuid of {_p}%::12} to "main_subs"
+    set {_x} to chest named "&aHauptkategorien"
+    set lore of {_x} to "&7Waffen, Werkzeuge, Blöcke, Tränke, Utility"
+    set slot 14 of {_inv} to {_x}
+    set {-bw::setmap::%uuid of {_p}%::14} to "main_cats"
+    set {_x} to hopper named "&eJetzt sortieren"
+    set lore of {_x} to "&7Sortiert dein Inventar sofort."
+    set slot 16 of {_inv} to {_x}
+    set {-bw::setmap::%uuid of {_p}%::16} to "main_sort"
+    set {_x} to barrier named "&cAlles zurücksetzen"
+    set lore of {_x} to "&7Alle Slot-Einstellungen löschen."
+    set slot 22 of {_inv} to {_x}
+    set {-bw::setmap::%uuid of {_p}%::22} to "main_reset"
+    set {_x} to arrow named "&7Zurück zum Menü"
+    set slot 18 of {_inv} to {_x}
+    set {-bw::setmap::%uuid of {_p}%::18} to "main_home"
+    open {_inv} to {_p}
+
+function openItemSettings(p: player):
+    delete {-bw::setmap::%uuid of {_p}%::*}
+    delete {-bw::setlbl::%uuid of {_p}%::*}
+    set {_inv} to chest inventory with 6 rows named "&8Hotbar: Item wählen"
+    bwSetEntry({_inv}, 0, "wooden_sword", wooden sword, "&aHolzschwert", {_p})
+    bwSetEntry({_inv}, 1, "stone_sword", stone sword, "&aSteinschwert", {_p})
+    bwSetEntry({_inv}, 2, "iron_sword", iron sword, "&aEisenschwert", {_p})
+    bwSetEntry({_inv}, 3, "diamond_sword", diamond sword, "&aDiamantschwert", {_p})
+    bwSetEntry({_inv}, 4, "stick", stick, "&aKnockback Stick", {_p})
+    bwSetEntry({_inv}, 5, "bow", bow, "&aBogen", {_p})
+    bwSetEntry({_inv}, 6, "arrow", arrow, "&aPfeile", {_p})
+    bwSetEntry({_inv}, 7, "wooden_pickaxe", wooden pickaxe, "&aHolzspitzhacke", {_p})
+    bwSetEntry({_inv}, 8, "stone_pickaxe", stone pickaxe, "&aSteinspitzhacke", {_p})
+    bwSetEntry({_inv}, 9, "iron_pickaxe", iron pickaxe, "&aEisenspitzhacke", {_p})
+    bwSetEntry({_inv}, 10, "wooden_axe", wooden axe, "&aHolzaxt", {_p})
+    bwSetEntry({_inv}, 11, "stone_axe", stone axe, "&aSteinaxt", {_p})
+    bwSetEntry({_inv}, 12, "iron_axe", iron axe, "&aEisenaxt", {_p})
+    bwSetEntry({_inv}, 13, "shears", shears, "&aSchere", {_p})
+    bwSetEntry({_inv}, 14, "wool", white wool, "&aWolle", {_p})
+    bwSetEntry({_inv}, 15, "planks", oak planks, "&aHolzplanken", {_p})
+    bwSetEntry({_inv}, 16, "end_stone", end stone, "&aEndstein", {_p})
+    bwSetEntry({_inv}, 17, "glass", glass, "&aGlas", {_p})
+    bwSetEntry({_inv}, 18, "packed_ice", packed ice, "&aEis", {_p})
+    bwSetEntry({_inv}, 19, "ladder", ladder, "&aLeiter", {_p})
+    bwSetEntry({_inv}, 20, "iron_block", iron block, "&aEisenblock", {_p})
+    bwSetEntry({_inv}, 21, "golden_apple", golden apple, "&aGoldener Apfel", {_p})
+    bwSetEntry({_inv}, 22, "tnt", tnt, "&aTNT", {_p})
+    bwSetEntry({_inv}, 23, "tnt_sheep", sheep spawn egg, "&aTNT-Schaf", {_p})
+    bwSetEntry({_inv}, 24, "fireball", fire charge, "&aFeuerball", {_p})
+    bwSetEntry({_inv}, 25, "ender_pearl", ender pearl, "&aEnderperle", {_p})
+    bwSetEntry({_inv}, 26, "wind_charge", wind charge, "&aWind Charge", {_p})
+    bwSetEntry({_inv}, 27, "windkanone", nautilus shell, "&aWindkanone", {_p})
+    bwSetEntry({_inv}, 28, "rescue_platform", blaze rod, "&aRettungsplattform", {_p})
+    bwSetEntry({_inv}, 29, "teamchest", ender chest, "&aMobile Teamtruhe", {_p})
+    bwSetEntry({_inv}, 30, "golem", ghast spawn egg, "&aGolem", {_p})
+    bwSetEntry({_inv}, 31, "bridge_egg", egg, "&aBrücken-Ei", {_p})
+    bwSetEntry({_inv}, 32, "popup_tower", chest, "&aPopup Tower", {_p})
+    bwSetEntry({_inv}, 33, "potion_invisibility", potion, "&aInvisibility-Trank", {_p})
+    bwSetEntry({_inv}, 34, "potion_jump", potion, "&aJump-Boost-Trank", {_p})
+    bwSetEntry({_inv}, 35, "potion_speed", potion, "&aSpeed-Trank", {_p})
+    bwBackButton({_inv}, 49, {_p})
+    open {_inv} to {_p}
+
+function openSubSettings(p: player):
+    delete {-bw::setmap::%uuid of {_p}%::*}
+    delete {-bw::setlbl::%uuid of {_p}%::*}
+    set {_inv} to chest inventory with 4 rows named "&8Hotbar: Unterkategorie"
+    bwSetGroup({_inv}, 0, "sub_swords", iron sword, "&aSchwerter", "alle Schwerter, Knockback Stick", {_p})
+    bwSetGroup({_inv}, 1, "sub_bows", bow, "&aBögen", "Bögen", {_p})
+    bwSetGroup({_inv}, 2, "sub_arrows", arrow, "&aPfeile", "Pfeile", {_p})
+    bwSetGroup({_inv}, 3, "sub_pickaxes", iron pickaxe, "&aSpitzhacken", "alle Spitzhacken", {_p})
+    bwSetGroup({_inv}, 4, "sub_axes", iron axe, "&aÄxte", "alle Äxte", {_p})
+    bwSetGroup({_inv}, 5, "sub_shears", shears, "&aSchere", "Schere", {_p})
+    bwSetGroup({_inv}, 6, "sub_blocks", white wool, "&aBlöcke", "Wolle, Holz, Endstein, Glas, Eis, Leiter, Eisenblock", {_p})
+    bwSetGroup({_inv}, 7, "sub_potions", potion, "&aTränke", "alle Tränke", {_p})
+    bwSetGroup({_inv}, 8, "sub_food", golden apple, "&aEssen", "Goldener Apfel", {_p})
+    bwSetGroup({_inv}, 9, "sub_explosives", tnt, "&aSprengstoff", "TNT, TNT-Schaf, Feuerball", {_p})
+    bwSetGroup({_inv}, 10, "sub_mobility", ender pearl, "&aFortbewegung", "Enderperle, Wind Charge, Windkanone, Rettungsplattform, Brücken-Ei", {_p})
+    bwSetGroup({_inv}, 11, "sub_special", ender chest, "&aSpezial", "Teamtruhe, Golem, Popup Tower", {_p})
+    bwBackButton({_inv}, 31, {_p})
+    open {_inv} to {_p}
+
+function openCatSettings(p: player):
+    delete {-bw::setmap::%uuid of {_p}%::*}
+    delete {-bw::setlbl::%uuid of {_p}%::*}
+    set {_inv} to chest inventory with 3 rows named "&8Hotbar: Hauptkategorie"
+    bwSetGroup({_inv}, 11, "cat_melee", diamond sword, "&aWaffen", "Schwerter, Bögen, Pfeile", {_p})
+    bwSetGroup({_inv}, 12, "cat_tools", iron pickaxe, "&aWerkzeuge", "Spitzhacken, Äxte, Schere", {_p})
+    bwSetGroup({_inv}, 13, "cat_blocks", white wool, "&aBlöcke", "alle Blöcke", {_p})
+    bwSetGroup({_inv}, 14, "cat_potions", potion, "&aTränke", "alle Tränke", {_p})
+    bwSetGroup({_inv}, 15, "cat_utility", tnt, "&aUtility", "Essen, Sprengstoff, Fortbewegung, Spezial", {_p})
+    bwBackButton({_inv}, 22, {_p})
+    open {_inv} to {_p}
+
+function openItemSlotMenu(p: player):
+    set {_inv} to chest inventory with 2 rows named "&8Hotbar: Slot wählen"
+    loop 9 times:
+        set {_x} to lime stained glass pane named "&aHotbar-Slot %loop-number%"
+        set slot (loop-number - 1) of {_inv} to {_x}
+    set {_x} to barrier named "&cAutomatisch (kein fester Slot)"
+    set slot 13 of {_inv} to {_x}
+    open {_inv} to {_p}
+
+command /bwsettings:
+    aliases: settings, einstellungen
+    trigger:
+        openSettingsHome(player)
+
+on inventory click:
+    set {_t} to "%name of player's current inventory%"
+    if {_t} does not contain "Hotbar:":
+        stop
+    cancel event
+    set {_p} to player
+    set {_u} to uuid of {_p}
+    # Slot-Auswahl
+    if {_t} contains "Slot wählen":
+        set {_id} to {-bw::setitem::%{_u}%}
+        if {_id} is not set:
+            stop
+        set {_lab} to {-bw::setlabel::%{_u}%}
+        set {_n} to 0
+        loop 9 times:
+            if clicked slot is (loop-number - 1):
+                set {_n} to loop-number
+        if {_n} > 0:
+            set {bw::islot::%{_u}%::%{_id}%} to {_n}
+            send "&a%{_lab}% &7liegt jetzt im Hotbar-Slot &f%{_n}%&7." to {_p}
+        else if clicked slot is 13:
+            delete {bw::islot::%{_u}%::%{_id}%}
+            send "&a%{_lab}% &7wird wieder automatisch einsortiert." to {_p}
+        else:
+            stop
+        wait 1 tick
+        bwArrange({_p})
+        if {_id} starts with "sub_":
+            openSubSettings({_p})
+        else if {_id} starts with "cat_":
+            openCatSettings({_p})
+        else:
+            openItemSettings({_p})
+        stop
+    # angeklickten Eintrag der anderen Menüs ermitteln
+    set {_key} to "none"
+    set {_lab} to ""
+    loop 54 times:
+        set {_s} to loop-number - 1
+        if clicked slot is {_s}:
+            if {-bw::setmap::%{_u}%::%{_s}%} is set:
+                set {_key} to {-bw::setmap::%{_u}%::%{_s}%}
+                set {_lab} to {-bw::setlbl::%{_u}%::%{_s}%}
+    if {_key} is "none":
+        stop
+    # Startmenü: Sortierung | Quickshop
+    if {_t} contains "Menü":
+        if {_key} is "home_sort":
+            wait 1 tick
+            openSettingsMain({_p})
+        else if {_key} is "home_qs":
+            wait 1 tick
+            openQuickshopMenu({_p})
+        stop
+    # Quickshop-Menü
+    if {_t} contains "Quickshop":
+        if {_key} is "back":
+            wait 1 tick
+            openSettingsHome({_p})
+        else if {_key} starts with "qs_":
+            set {_qn} to {_key}
+            replace all "qs_" with "" in {_qn}
+            delete {bw::qb::%{_u}%::%{_qn}%}
+            send "&7Quickshop-Slot &f%{_qn}% &7wurde geleert." to {_p}
+            wait 1 tick
+            openQuickshopMenu({_p})
+        stop
+    # Hauptmenü
+    if {_t} contains "Einstellungen":
+        if {_key} is "main_items":
+            wait 1 tick
+            openItemSettings({_p})
+        else if {_key} is "main_subs":
+            wait 1 tick
+            openSubSettings({_p})
+        else if {_key} is "main_cats":
+            wait 1 tick
+            openCatSettings({_p})
+        else if {_key} is "main_sort":
+            bwArrange({_p})
+            send "&aInventar wurde sortiert." to {_p}
+        else if {_key} is "main_home":
+            wait 1 tick
+            openSettingsHome({_p})
+        else if {_key} is "main_reset":
+            delete {bw::islot::%{_u}%::*}
+            send "&7Alle Slot-Einstellungen wurden zurückgesetzt." to {_p}
+            wait 1 tick
+            openSettingsMain({_p})
+        stop
+    # Item-, Unterkategorie- und Kategorie-Menü
+    if {_key} is "back":
+        wait 1 tick
+        openSettingsMain({_p})
+        stop
+    set {-bw::setitem::%{_u}%} to {_key}
+    set {-bw::setlabel::%{_u}%} to {_lab}
+    wait 1 tick
+    openItemSlotMenu({_p})
+
+# Nach jedem Kauf im Shop (auch über Quickbuy) das Inventar nach den Einstellungen sortieren
+on inventory click with priority lowest:
+    set {_ci} to event-item
+    if {_ci} is not set:
+        stop
+    set {_nm} to "%name of player's current inventory%"
+    if {_nm} contains "Hotbar:":
+        stop
+    set {_trig} to false
+    if "%lore of {_ci}%" contains "Price":
+        set {_trig} to true
+    if {_nm} contains "shop":
+        set {_trig} to true
+    if {_trig} is false:
+        stop
+    if "%type of {_ci}%" contains "glass pane":
+        stop
+    set {_p} to player
+    wait 3 ticks
+    bwArrange({_p})
+
+# =========================================================
+# 13. QUICKSHOP: GELERNTE SPEZIAL-ITEMS ANZEIGEN
+# =========================================================
+# /qsstatus          zeigt, welche Spezial-Items schon gelernt sind
+# /qsstatus reset    vergisst alle gelernten Items (werden beim nächsten normalen Kauf neu gelernt)
+command /qsstatus [<text>]:
+    permission: op
+    trigger:
+        if arg-1 is "reset":
+            delete {bw::tpl::*}
+            send "&aAlle gelernten Spezial-Items wurden vergessen." to sender
+            stop
+        loop "tnt", "tnt_sheep", "fireball", "golem", "bridge_egg", "popup_tower", "rescue_platform", "potion_invisibility", "potion_jump" and "potion_speed":
+            if {bw::tpl::%loop-value%} is set:
+                send "&a✔ &f%bwQsLabel(loop-value)% &7(gelernt)" to sender
+            else:
+                send "&c✘ &f%bwQsLabel(loop-value)% &7(einmal im Shop kaufen)" to sender
+
+# =========================================================
+# 14. /chelp: siehe BedwarsExtras.sk (interaktives GUI)
+# =========================================================
+
+
+# =========================================================
+# 15. SCHMIEDE (Forge): BONUS-EISEN UND BONUS-GOLD
+# =========================================================
+# Der Basis-Drop kommt AUSSCHLIESSLICH von SBW laut config.yml (resources):
+#   iron = 1 Eisen alle 0,75 s, gold = 1 Gold alle 8 s  (fuer alle Arenen gleich)
+# Das Skript aendert diesen Basis-Drop NIE. Es bricht ihn nicht ab und verschiebt ihn nicht.
+# Dadurch bleibt der Takt immer exakt 0,75 s, auch mit Schmiede.
+# Die Schmiede legt bei jedem Basis-Drop nur ZUSAETZLICHE Barren an dieselbe Stelle.
+# Prozente gehen IMMER von der Grundmenge OHNE Schmiede aus (nichts wird multipliziert):
+#   Stufe 1 = +50 %  -> Bonus 0,5 pro Drop  (abwechselnd +0 und +1)
+#   Stufe 2 = +100 % -> Bonus 1 pro Drop
+#   Stufe 3 = Smaragde alle 60 s (Iron/Gold bleiben +100 %)
+#   Stufe 4 = +200 % -> Bonus 2 pro Drop (+ Smaragde weiterhin alle 60 s)
+# Der Bruchteil (0,5) wird gemerkt und beim naechsten Drop addiert, es geht nichts verloren.
+# Zuordnung Spawner -> Team: naechster Smaragd-Spawner (/emeraldspawner add <name> <team>)
+# in {@forge_radius} Bloecken. Spawner ohne Team in der Naehe bekommen keinen Bonus.
+function bwForgeKey(l: location) :: text:
+    set {_best} to {@forge_radius}
+    set {_k} to "none"
+    loop {bw::esp::*}:
+        if world of loop-value is world of {_l}:
+            set {_d} to distance between loop-value and {_l}
+            if {_d} <= {_best}:
+                set {_best} to {_d}
+                set {_k} to "%name of world of {_l}%|%{bw::espteam::%loop-index%}%"
+    return {_k}
+
+# Faktor der Gesamtmenge je Stufe (1 = Grundmenge ohne Schmiede)
+function bwForgeMult(stage: number) :: number:
+    if {_stage} >= 4:
+        return 3
+    if {_stage} >= 2:
+        return 2
+    if {_stage} >= 1:
+        return 1.5
+    return 1
+
+# Legt den Schmiede-Bonus als zusaetzlichen Drop an die Stelle des Basis-Drops.
+function bwForgeBonus(drp: item, loc: location, res: text):
+    set {_key} to bwForgeKey({_loc})
+    if {_key} is "none":
+        stop
+    set {_stage} to 0
+    if {bw::forge::%{_key}%} is set:
+        set {_stage} to {bw::forge::%{_key}%}
+    set {_mult} to bwForgeMult({_stage})
+    if {_mult} <= 1:
+        stop
+    set {_ck} to "%{_key}%|%{_res}%"
+    set {_carry} to {bw::fcarry::%{_ck}%}
+    if {_carry} is not set:
+        set {_carry} to 0
+    set {_bonus} to (item amount of {_drp}) * ({_mult} - 1) + {_carry}
+    set {_n} to floor({_bonus})
+    set {bw::fcarry::%{_ck}%} to {_bonus} - {_n}
+    if {_n} > 0:
+        set {_ex} to {_drp}
+        set item amount of {_ex} to {_n}
+        # Merker: dieser Drop loest unser eigenes "item spawn" nicht noch einmal aus
+        set {-bw::selfdrop} to true
+        drop {_ex} at {_loc} without velocity
+        delete {-bw::selfdrop}
+
+on item spawn of iron ingot:
+    if "{@spawner_boost}" is not "true":
+        stop
+    if {-bw::selfdrop} is true:
+        stop
+    if "%name of event-item%" does not contain "Iron":
+        stop
+    bwForgeBonus(event-item, location of event-entity, "iron")
+
+on item spawn of gold ingot:
+    if "{@spawner_boost}" is not "true":
+        stop
+    if {-bw::selfdrop} is true:
+        stop
+    if "%name of event-item%" does not contain "Gold":
+        stop
+    bwForgeBonus(event-item, location of event-entity, "gold")
+
+
+# =========================================================
+# 15b. MAXIMALE ANZAHL AUF DEM BODEN: Diamanten und Smaragde
+# =========================================================
+# Es liegen nie mehr als {@max_diamonds} Diamanten und {@max_emeralds} Smaragde gleichzeitig an einem Spawner.
+# Das Skript zählt alle Items (Stapelgröße) im Umkreis und bricht den nächsten Drop ab, wenn das Limit erreicht ist.
+# Zusätzlich stehen die gleichen Limits (6 Diamanten / 4 Smaragde) in der sbaconfig.yml (upgrades.limit).
+function bwGroundCount(l: location, kind: text) :: number:
+    set {_n} to 0
+    loop all entities in radius {@cap_radius} around {_l}:
+        if loop-entity is a dropped item:
+            set {_i} to item of loop-entity
+            if {_kind} is "emerald":
+                if {_i} is emerald:
+                    add item amount of {_i} to {_n}
+            else if {_kind} is "diamond":
+                if {_i} is diamond:
+                    add item amount of {_i} to {_n}
+    return {_n}
+
+on item spawn of emerald:
+    if bwIsArena(world of event-entity) is not true:
+        stop
+    if bwGroundCount(location of event-entity, "emerald") >= {@max_emeralds}:
+        cancel event
+
+on item spawn of diamond:
+    if bwIsArena(world of event-entity) is not true:
+        stop
+    if bwGroundCount(location of event-entity, "diamond") >= {@max_diamonds}:
+        cancel event
+
+# =========================================================
+# 16. PUNKTE- UND LEVELSYSTEM
+# =========================================================
+# {bwp::pts::<uuid>} = ausgebbare Punkte (Glücksrad), {bwp::xp::<uuid>} = gesamte XP (sinkt nie -> Level)
+# Punkte kommen über die SBW-Rewards (config.yml) per /bwpoints ...
+
+# XP, die man von Level l zu l+1 braucht
+function bwXpNeed(l: number) :: number:
+    return 100 + 50 * {_l}
+
+function bwLevelOf(xp: number) :: number:
+    set {_l} to 1
+    set {_x} to {_xp}
+    while {_l} < {@max_level}:
+        if {_x} < bwXpNeed({_l}):
+            return {_l}
+        subtract bwXpNeed({_l}) from {_x}
+        add 1 to {_l}
+    return {_l}
+
+# XP, die im aktuellen Level schon gesammelt wurden
+function bwXpInLevel(xp: number) :: number:
+    set {_l} to 1
+    set {_x} to {_xp}
+    while {_l} < {@max_level}:
+        if {_x} < bwXpNeed({_l}):
+            return {_x}
+        subtract bwXpNeed({_l}) from {_x}
+        add 1 to {_l}
+    return 0
+
+function bwPts(u: text) :: number:
+    if {bwp::pts::%{_u}%} is not set:
+        return 0
+    return {bwp::pts::%{_u}%}
+
+function bwXp(u: text) :: number:
+    if {bwp::xp::%{_u}%} is not set:
+        return 0
+    return {bwp::xp::%{_u}%}
+
+function bwBar(cur: number, tot: number) :: text:
+    set {_f} to floor(({_cur} / {_tot}) * 10)
+    set {_s} to ""
+    loop 10 times:
+        if loop-number <= {_f}:
+            set {_s} to "%{_s}%&a|"
+        else:
+            set {_s} to "%{_s}%&7|"
+    return {_s}
+
+function bwStatusLine(p: player) :: text:
+    set {_u} to "%uuid of {_p}%"
+    set {_xp} to bwXp({_u})
+    set {_lv} to bwLevelOf({_xp})
+    set {_cur} to bwXpInLevel({_xp})
+    set {_need} to bwXpNeed({_lv})
+    set {_bar} to bwBar({_cur}, {_need})
+    return "&6✦ Level %{_lv}% &8[%{_bar}%&8] &7%{_cur}%/%{_need}% XP &8| &e%bwPts({_u})% Punkte"
+
+function bwAddPoints(p: player, amount: number, reason: text):
+    set {_u} to "%uuid of {_p}%"
+    set {_xp} to bwXp({_u})
+    set {_old} to bwLevelOf({_xp})
+    set {bwp::xp::%{_u}%} to {_xp} + {_amount}
+    set {bwp::pts::%{_u}%} to bwPts({_u}) + {_amount}
+    set {_new} to bwLevelOf({_xp} + {_amount})
+    send action bar "&6+%{_amount}% Punkte &7(%{_reason}%)" to {_p}
+    if {_new} > {_old}:
+        set {_bonus} to {_new} * 20
+        add {_bonus} to {bwp::pts::%{_u}%}
+        send title "&6&lLEVEL UP!" with subtitle "&eLevel %{_new}% &7(+%{_bonus}% Bonuspunkte)" to {_p} for 3 seconds
+        send "&6&lLEVEL UP! &eDu bist jetzt &6Level %{_new}%&e. &7Bonus: &e+%{_bonus}% Punkte" to {_p}
+        play sound "entity.player.levelup" with volume 1 and pitch 1 to {_p}
+        # Level-Kosmetika (Level 5, 10, 20, ...) freischalten (steht in BedwarsExtras.sk)
+        bwCosSync({_p}, true)
+
+# Gesamt-XP, die man braucht, um Level l mit 0 XP im Level zu erreichen
+function bwXpForLevel(l: number) :: number:
+    set {_x} to 0
+    set {_i} to 1
+    while {_i} < {_l}:
+        add bwXpNeed({_i}) to {_x}
+        add 1 to {_i}
+    return {_x}
+
+# Admin: erhöht das Level um n (höchstens max_level). Der Fortschritt im Level bleibt erhalten,
+# es gibt keine Bonuspunkte. Schaltet passende Level-Kosmetika frei.
+function bwAddLevels(p: player, n: number):
+    set {_u} to "%uuid of {_p}%"
+    set {_xp} to bwXp({_u})
+    set {_old} to bwLevelOf({_xp})
+    set {_target} to {_old} + {_n}
+    if {_target} > {@max_level}:
+        set {_target} to {@max_level}
+    set {bwp::xp::%{_u}%} to bwXpForLevel({_target}) + bwXpInLevel({_xp})
+    set {_new} to bwLevelOf(bwXp({_u}))
+    if {_new} > {_old}:
+        send title "&6&lLEVEL UP!" with subtitle "&eLevel %{_new}%" to {_p} for 3 seconds
+        send "&6&lLEVEL UP! &eEin Admin hat dein Level erhöht: &6Level %{_new}%" to {_p}
+        play sound "entity.player.levelup" with volume 1 and pitch 1 to {_p}
+        bwCosSync({_p}, true)
+
+# Punkte OHNE XP (Admin-Vergabe): erhöht nur das ausgebbare Guthaben, nie XP/Level.
+# (Glücksrad/Casino-Gewinne, /pay, Tagesbonus, Bank und Börse fassen XP ohnehin nie an.)
+function bwGivePoints(p: player, amount: number, reason: text):
+    set {_u} to "%uuid of {_p}%"
+    set {bwp::pts::%{_u}%} to bwPts({_u}) + {_amount}
+    send action bar "&6+%{_amount}% Punkte &7(%{_reason}%)" to {_p}
+
+# Wird von den SBW-Rewards (config.yml) als Konsolenbefehl ausgeführt
+command /bwpoints <text> <text>:
+    permission: op
+    usage: /bwpoints <join|kill|finalkill|bed|win> <spieler>
+    trigger:
+        set {_p} to arg-2 parsed as player
+        if {_p} is not set:
+            stop
+        if arg-1 is "join":
+            # Spielstart erkannt (erster Spieler einer Runde): Rundendaten der Arena frisch starten
+            set {_wn} to name of world of {_p}
+            set {_newgame} to true
+            if {-bw::gs::%{_wn}%} is set:
+                if difference between {-bw::gs::%{_wn}%} and now is less than 20 seconds:
+                    set {_newgame} to false
+            set {-bw::gs::%{_wn}%} to now
+            if {_newgame} is true:
+                bwResetWorldData(world of {_p})
+                loop all players in world of {_p}:
+                    delete {-bw::tc::%uuid of loop-player%}
+            bwAddPoints({_p}, {@pts_join}, "Runde betreten")
+            bwStatAdd({_p}, "games", 1)
+        else if arg-1 is "kill":
+            bwAddPoints({_p}, {@pts_kill}, "Kill")
+            bwStatAdd({_p}, "kills", 1)
+        else if arg-1 is "finalkill":
+            bwAddPoints({_p}, {@pts_final_kill}, "Final Kill")
+            bwStatAdd({_p}, "finalkills", 1)
+        else if arg-1 is "bed":
+            bwAddPoints({_p}, {@pts_bed}, "Bett zerstört")
+            bwStatAdd({_p}, "beds", 1)
+            bwBedEffect({_p})
+        else if arg-1 is "win":
+            bwAddPoints({_p}, {@pts_win}, "Sieg")
+            bwStatAdd({_p}, "wins", 1)
+
+command /addpoints <text> <number>:
+    permission: op
+    usage: /addpoints <spieler> <anzahl>
+    trigger:
+        set {_p} to arg-1 parsed as player
+        if {_p} is not set:
+            send "&cSpieler nicht online." to sender
+            stop
+        bwGivePoints({_p}, arg-2, "Admin")
+        send "&a%arg-2% Punkte an %{_p}% vergeben. &7(zählt nicht als XP)" to sender
+
+# /xp reset <spieler>: setzt nur XP und Level zurück (Level 1), Punkte und Statistiken bleiben
+command /xp [<text>] [<text>]:
+    permission: op
+    usage: /xp reset <spieler>
+    trigger:
+        if arg-1 is not "reset":
+            send "&cNutzung: &e/xp reset <Spieler>" to sender
+            stop
+        if arg-2 is not set:
+            send "&cNutzung: &e/xp reset <Spieler>" to sender
+            stop
+        set {_op} to arg-2 parsed as offlineplayer
+        set {_u} to "%uuid of {_op}%"
+        if {bwx::name::%{_u}%} is not set:
+            send "&cVon diesem Spieler gibt es keine Daten." to sender
+            stop
+        delete {bwp::xp::%{_u}%}
+        send "&aXP und Level von &f%{bwx::name::%{_u}%}% &awurden zurückgesetzt (Level 1). &7Punkte und Statistiken bleiben." to sender
+        set {_pl} to arg-2 parsed as player
+        if {_pl} is set:
+            send "&6Deine XP und dein Level wurden zurückgesetzt." to {_pl}
+
+# /punkte, /punkte <spieler> und /pay <spieler> <anzahl> stehen in BedwarsExtras.sk
+
+# Anzeige in der Lobby-Welt
+every 2 seconds:
+    loop all players:
+        if name of world of loop-player is "{@lobby_world}":
+            set {_s} to bwStatusLine(loop-player)
+            send action bar {_s} to loop-player
+
+on world change:
+    set {_p} to player
+    wait 1 second
+    if name of world of {_p} is "{@lobby_world}":
+        send "&8&m-------&r &6Dein Fortschritt &8&m-------" to {_p}
+        send bwStatusLine({_p}) to {_p}
+        send "&7Mit &e/gamble &7setzt du deine Punkte im Glücksrad ein." to {_p}
+
+on join:
+    set {_p} to player
+    wait 2 seconds
+    if name of world of {_p} is "{@lobby_world}":
+        send bwStatusLine({_p}) to {_p}
+        send "&7Mit &e/gamble &7setzt du deine Punkte im Glücksrad ein." to {_p}
+
+# =========================================================
+# 17./18. GAMBLING: siehe BedwarsGamble.sk
+# =========================================================
+
+# /itemdebug: zeigt Name, Lore und Typ des Items in deiner Hand (zum Vergleichen von Plugin-Eisen und Skript-Eisen)
+command /itemdebug:
+    permission: op
+    trigger:
+        send "&7Typ: &f%type of player's tool%" to player
+        send "&7Menge: &f%item amount of player's tool%" to player
+        send "&7Name: &f%name of player's tool%" to player
+        send "&7Lore: &f%lore of player's tool%" to player
+        send "&7Komplett: &f%player's tool%" to player
