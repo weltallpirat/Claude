@@ -1,11 +1,16 @@
 # =========================================================
-# BedwarsGamble.sk  -  KOMPLETTES GAMBLING (Casino)
+# BedwarsGamble.sk  -  KOMPLETTES GAMBLING (Casino)  -  NUR PER NPC
 # =========================================================
 # Ersetzt die alten Gamble-Abschnitte aus Bedwars.sk und BedwarsExtras.sk.
-#   /gamble                       Casino-Hub
-#   /gamble rad|muenzwurf|slots|roulette|blackjack|bonus|stats
 # Spiele: Glücksrad (+ Doppelt oder nichts), Münzwurf, Spielautomat, Roulette, Blackjack,
-#         Tagesbonus, Statistik. Alle Fenster haben einen einheitlichen Rahmen (✦ im Titel).
+#         Tagesbonus + Bilanz (ein NPC), Bank, Börse. Alle Fenster haben einen einheitlichen Rahmen (✦ im Titel).
+#
+# ZUGANG: Jedes Spiel hat einen eigenen Befehl (siehe ganz unten, /casinorad usw.), der direkt das GUI öffnet.
+#   - Die Befehle sind für Spieler gesperrt. Sie laufen über Citizens-NPCs, die den Befehl als KONSOLE
+#     ausführen:   /npc command add casinorad <p>      (<p> = Name des Spielers, der den NPC anklickt)
+#   - Admins (bedwars.admin oder OP) dürfen die Befehle selbst tippen und /gamble (Hub) benutzen.
+#   - Aus den Spiel-Fenstern gibt es keinen Weg mehr in den Hub: der Button unten schließt nur das Fenster.
+#
 # Der Einsatz wird sofort abgezogen. Unterbricht ein Reload/Absturz ein Spiel, gibt Bedwars.sk (on load)
 # den Einsatz zurück ({bwg::pend::<uuid>}). {-bwg::spin::<uuid>} sperrt parallele Spiele.
 # Alle Klicks laufen über EINEN Handler: Items tragen am Ende der Lore "[g=spiel:aktion:wert]".
@@ -14,6 +19,7 @@ options:
     bj_max: 5000
     daily_hours: 20
     daily_base: 50
+    admin_perm: bedwars.admin
 
 # ---------------------------------------------------------
 # DESIGN-HELFER
@@ -256,9 +262,13 @@ function bwGambleStats(p: player):
     set {_x} to clock named "&a&lTagesbonus-Serie"
     set lore of {_x} to "&e%bwGStat({_u}, "dstreak")% &7Tage in Folge"
     set slot 23 of {_inv} to {_x}
-    set {_x} to arrow named "&7Zurück zum Casino"
-    set lore of {_x} to "&8[g=hub:open]"
+    set {_x} to barrier named "&c&lSchließen"
+    set lore of {_x} to "&8[g=hub:close]"
     set slot 31 of {_inv} to {_x}
+    set {_x} to clock named "&2&lTagesbonus"
+    set lore of {_x} to "&7Gratis-Punkte abholen" and " " and "&a▶ Klick zum Öffnen" and "&8[g=hub:daily]"
+    set slot 22 of {_inv} to {_x}
+
     open {_inv} to {_p}
 
 # ---------------------------------------------------------
@@ -321,9 +331,13 @@ function bwGDailyMenu(p: player):
     set {_x} to nether star named "&6&lGuthaben: &e%bwPts({_u})%"
     set lore of {_x} to "&7Serie: &e%{_streak}% &7Tage" and "&7Level: &6%{_lv}%"
     set slot 4 of {_inv} to {_x}
-    set {_x} to arrow named "&7Zurück zum Casino"
-    set lore of {_x} to "&8[g=hub:open]"
+    set {_x} to barrier named "&c&lSchließen"
+    set lore of {_x} to "&8[g=hub:close]"
     set slot 31 of {_inv} to {_x}
+    set {_x} to writable book named "&9&lBilanz"
+    set lore of {_x} to "&7Deine Gamble-Statistik" and " " and "&a▶ Klick zum Öffnen" and "&8[g=hub:stats]"
+    set slot 24 of {_inv} to {_x}
+
     open {_inv} to {_p}
 
 function bwGDailyClaim(p: player):
@@ -429,8 +443,8 @@ function bwGBetMenu(p: player, game: text):
         set {_y} to arrow named "&7Andere Wette"
         set lore of {_y} to "&8[g=rou:menu]"
     else:
-        set {_y} to arrow named "&7Zurück zum Casino"
-        set lore of {_y} to "&8[g=hub:open]"
+        set {_y} to barrier named "&c&lSchließen"
+        set lore of {_y} to "&8[g=hub:close]"
     set slot 40 of {_inv} to {_y}
     open {_inv} to {_p}
 
@@ -582,8 +596,8 @@ function bwWheelSpin(p: player, bet: number):
     set {_x} to arrow named "&7Anderer Einsatz"
     set lore of {_x} to "&8[g=wheel:menu]"
     set slot 50 of {_inv} to {_x}
-    set {_x} to arrow named "&7Zurück zum Casino"
-    set lore of {_x} to "&8[g=hub:open]"
+    set {_x} to barrier named "&c&lSchließen"
+    set lore of {_x} to "&8[g=hub:close]"
     set slot 45 of {_inv} to {_x}
     if {_win} > 0:
         set {-bwg::dbl::%{_u}%} to {_win}
@@ -701,8 +715,8 @@ function bwCoinFlip(p: player, bet: number, side: text):
     set {_x} to lime dye named "&a▶ Nochmal (&e%{_bet}% Punkte&a)"
     set lore of {_x} to "&7Gleiche Seite, gleicher Einsatz" and "&8[g=coin:again]"
     set slot 42 of {_inv} to {_x}
-    set {_x} to arrow named "&7Zurück zum Casino"
-    set lore of {_x} to "&8[g=hub:open]"
+    set {_x} to barrier named "&c&lSchließen"
+    set lore of {_x} to "&8[g=hub:close]"
     set slot 38 of {_inv} to {_x}
     set {_ft} to "KOPF"
     if {_res} is 1:
@@ -837,8 +851,8 @@ function bwSlotSpin(p: player, bet: number):
     set {_x} to lime dye named "&a▶ Nochmal (&e%{_bet}% Punkte&a)"
     set lore of {_x} to "&7Gleicher Einsatz" and "&8[g=slot:again]"
     set slot 42 of {_inv} to {_x}
-    set {_x} to arrow named "&7Zurück zum Casino"
-    set lore of {_x} to "&8[g=hub:open]"
+    set {_x} to barrier named "&c&lSchließen"
+    set lore of {_x} to "&8[g=hub:close]"
     set slot 38 of {_inv} to {_x}
     bwGBox({_p}, "SPIELAUTOMAT", {_bet}, {_win}, "Walzen: %bwSlotWord({_a})% | %bwSlotWord({_b})% | %bwSlotWord({_c})%")
     bwGFx({_p}, {_bet}, {_win})
@@ -985,8 +999,8 @@ function bwRouMenu(p: player):
     set {_x} to nether star named "&6&lGuthaben: &e%bwPts({_u})% Punkte"
     set lore of {_x} to "&7Bei der &a0 &7verlieren alle Aussenwetten" and "&7Einsatz: 10 bis &e{@roulette_max}"
     set slot 4 of {_inv} to {_x}
-    set {_x} to arrow named "&7Zurück zum Casino"
-    set lore of {_x} to "&8[g=hub:open]"
+    set {_x} to barrier named "&c&lSchließen"
+    set lore of {_x} to "&8[g=hub:close]"
     set slot 40 of {_inv} to {_x}
     open {_inv} to {_p}
 
@@ -1081,8 +1095,8 @@ function bwRouSpin(p: player, bet: number):
     set {_x} to arrow named "&7Neue Wette"
     set lore of {_x} to "&8[g=rou:menu]"
     set slot 42 of {_inv} to {_x}
-    set {_x} to arrow named "&7Zurück zum Casino"
-    set lore of {_x} to "&8[g=hub:open]"
+    set {_x} to barrier named "&c&lSchließen"
+    set lore of {_x} to "&8[g=hub:close]"
     set slot 44 of {_inv} to {_x}
     bwGBox({_p}, "ROULETTE", {_bet}, {_win}, "Die Kugel fällt auf %{_res}% (%{_cn}%&7). Deine Wette: %bwRouLabel({_type})%")
     bwGFx({_p}, {_bet}, {_win})
@@ -1273,8 +1287,8 @@ function bwBjFinish(p: player, u: text):
         set {_x} to arrow named "&7Anderer Einsatz"
         set lore of {_x} to "&8[g=bj:menu]"
         set slot 40 of {_inv} to {_x}
-        set {_x} to arrow named "&7Zurück zum Casino"
-        set lore of {_x} to "&8[g=hub:open]"
+        set {_x} to barrier named "&c&lSchließen"
+        set lore of {_x} to "&8[g=hub:close]"
         set slot 42 of {_inv} to {_x}
     set {-bwj::state::%{_u}%} to "done"
     bwGBox({_p}, "BLACKJACK", {_bet}, {_win}, "%{_why}%")
@@ -1549,15 +1563,179 @@ on inventory click:
         else if {_act} is "bet":
             bwBjStart({_p}, ({_v} parsed as number))
 
+
 # ---------------------------------------------------------
-# BEFEHL
+# CASINO NUR PER NPC
+# ---------------------------------------------------------
+# Gemeinsame Öffnen-Funktion für alle Spiel-Befehle
+function bwCasinoOpen(p: player, game: text):
+    if bwIsArena(world of {_p}) is true:
+        send "&cIn Arena-Welten kannst du nicht gamblen. Geh zurück in die Lobby!" to {_p}
+        stop
+    set {_u} to "%uuid of {_p}%"
+    if {-bwg::spin::%{_u}%} is true:
+        send action bar "&c✘ Dein Spiel läuft noch." to {_p}
+        stop
+    if {_game} is "wheel":
+        bwGBetMenu({_p}, "wheel")
+    else if {_game} is "coin":
+        bwGBetMenu({_p}, "coin")
+    else if {_game} is "slot":
+        bwGBetMenu({_p}, "slot")
+    else if {_game} is "rou":
+        bwRouMenu({_p})
+    else if {_game} is "bj":
+        bwGBetMenu({_p}, "bj")
+    else if {_game} is "daily":
+        bwGDailyMenu({_p})
+    else if {_game} is "stats":
+        bwGambleStats({_p})
+    else if {_game} is "bank":
+        bwBankMenu({_p})
+    else if {_game} is "stocks":
+        bwStkMenu({_p})
+
+# Ein Befehl pro Spiel. Nutzung durch den NPC (läuft als Konsole):  /npc command add <befehl> <p>
+# Spieler können die Befehle nicht benutzen, nur Admins (bedwars.admin / OP).
+
+command /casinorad [<player>]:
+    description: Das Glücksrad öffnen (nur per NPC oder für Admins)
+    trigger:
+        if sender is a player:
+            if sender does not have permission "{@admin_perm}":
+                send "&cDas Glücksrad erreichst du nur über den Glücksrad-NPC." to sender
+                stop
+        set {_t} to arg-1
+        if {_t} is not set:
+            set {_t} to player
+        if {_t} is not set:
+            stop
+        bwCasinoOpen({_t}, "wheel")
+
+command /casinomuenzwurf [<player>]:
+    description: Den Münzwurf öffnen (nur per NPC oder für Admins)
+    trigger:
+        if sender is a player:
+            if sender does not have permission "{@admin_perm}":
+                send "&cDen Münzwurf erreichst du nur über den Münzwurf-NPC." to sender
+                stop
+        set {_t} to arg-1
+        if {_t} is not set:
+            set {_t} to player
+        if {_t} is not set:
+            stop
+        bwCasinoOpen({_t}, "coin")
+
+command /casinoslots [<player>]:
+    description: Den Spielautomaten öffnen (nur per NPC oder für Admins)
+    trigger:
+        if sender is a player:
+            if sender does not have permission "{@admin_perm}":
+                send "&cDen Spielautomaten erreichst du nur über den Spielautomaten-NPC." to sender
+                stop
+        set {_t} to arg-1
+        if {_t} is not set:
+            set {_t} to player
+        if {_t} is not set:
+            stop
+        bwCasinoOpen({_t}, "slot")
+
+command /casinoroulette [<player>]:
+    description: Roulette öffnen (nur per NPC oder für Admins)
+    trigger:
+        if sender is a player:
+            if sender does not have permission "{@admin_perm}":
+                send "&cRoulette erreichst du nur über den Roulette-NPC." to sender
+                stop
+        set {_t} to arg-1
+        if {_t} is not set:
+            set {_t} to player
+        if {_t} is not set:
+            stop
+        bwCasinoOpen({_t}, "rou")
+
+command /casinoblackjack [<player>]:
+    description: Blackjack öffnen (nur per NPC oder für Admins)
+    trigger:
+        if sender is a player:
+            if sender does not have permission "{@admin_perm}":
+                send "&cBlackjack erreichst du nur über den Blackjack-NPC." to sender
+                stop
+        set {_t} to arg-1
+        if {_t} is not set:
+            set {_t} to player
+        if {_t} is not set:
+            stop
+        bwCasinoOpen({_t}, "bj")
+
+command /casinobonus [<player>]:
+    description: Den Tagesbonus öffnen (nur per NPC oder für Admins)
+    trigger:
+        if sender is a player:
+            if sender does not have permission "{@admin_perm}":
+                send "&cDen Tagesbonus erreichst du nur über den Tagesbonus-NPC." to sender
+                stop
+        set {_t} to arg-1
+        if {_t} is not set:
+            set {_t} to player
+        if {_t} is not set:
+            stop
+        bwCasinoOpen({_t}, "daily")
+
+command /casinostats [<player>]:
+    description: Die Bilanz öffnen (nur per NPC oder für Admins)
+    trigger:
+        if sender is a player:
+            if sender does not have permission "{@admin_perm}":
+                send "&cDie Bilanz erreichst du nur über den Tagesbonus-NPC." to sender
+                stop
+        set {_t} to arg-1
+        if {_t} is not set:
+            set {_t} to player
+        if {_t} is not set:
+            stop
+        bwCasinoOpen({_t}, "stats")
+
+command /casinobank [<player>]:
+    description: Die Bank öffnen (nur per NPC oder für Admins)
+    trigger:
+        if sender is a player:
+            if sender does not have permission "{@admin_perm}":
+                send "&cDie Bank erreichst du nur über den Bank-NPC." to sender
+                stop
+        set {_t} to arg-1
+        if {_t} is not set:
+            set {_t} to player
+        if {_t} is not set:
+            stop
+        bwCasinoOpen({_t}, "bank")
+
+command /casinoboerse [<player>]:
+    description: Die Börse öffnen (nur per NPC oder für Admins)
+    trigger:
+        if sender is a player:
+            if sender does not have permission "{@admin_perm}":
+                send "&cDie Börse erreichst du nur über den Börsen-NPC." to sender
+                stop
+        set {_t} to arg-1
+        if {_t} is not set:
+            set {_t} to player
+        if {_t} is not set:
+            stop
+        bwCasinoOpen({_t}, "stocks")
+
+# ---------------------------------------------------------
+# /gamble (Casino-Hub) - nur noch für Admins
 # ---------------------------------------------------------
 command /gamble [<text>]:
     aliases: gluecksrad, wheel, casino
-    usage: /gamble [rad|muenzwurf|slots|roulette|blackjack|bonus|stats]
+    usage: /gamble [rad|muenzwurf|slots|roulette|blackjack|bonus|stats|bank|boerse]
     trigger:
         if sender is not a player:
             send "&cNur für Spieler!" to sender
+            stop
+        if player does not have permission "{@admin_perm}":
+            send "&cDas Casino erreichst du nur über die Casino-NPCs." to player
             stop
         if bwIsArena(world of player) is true:
             send "&cIn Arena-Welten kannst du nicht gamblen. Geh zurück in die Lobby!" to player
@@ -1579,7 +1757,28 @@ command /gamble [<text>]:
             bwGDailyMenu(player)
         else if arg-1 is "stats" or "statistik":
             bwGambleStats(player)
+        else if arg-1 is "bank":
+            bwBankMenu(player)
+        else if arg-1 is "boerse" or "börse" or "aktien" or "stocks":
+            bwStkMenu(player)
         else:
             bwGambleHub(player)
 
-
+# ---------------------------------------------------------
+# Getippte Befehle /bank (und optional /aktien) für normale Spieler sperren.
+# Die Bank-NPCs nutzen /casinobank, sind also nicht betroffen.
+# Wenn /bank auch getippt erlaubt bleiben soll: diesen Block einfach löschen.
+# ---------------------------------------------------------
+on command:
+    if player is not set:
+        stop
+    if player has permission "{@admin_perm}":
+        stop
+    set {_c} to lowercase "%command%"
+    if {_c} is "bank":
+        cancel the event
+        send "&cDie Bank erreichst du nur über den Bank-NPC." to player
+    # Börse ebenfalls nur per NPC? Dann die drei Zeilen aktivieren (# entfernen):
+    # else if {_c} is "aktien":
+    #     cancel the event
+    #     send "&cDie Börse erreichst du nur über den Börsen-NPC." to player
