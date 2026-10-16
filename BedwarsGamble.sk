@@ -1,0 +1,1769 @@
+# =========================================================
+# BedwarsGamble.sk  -  KOMPLETTES GAMBLING (Casino)  -  NUR PER NPC
+# =========================================================
+# Ersetzt die alten Gamble-Abschnitte aus Bedwars.sk und BedwarsExtras.sk.
+# Spiele: Glücksrad (+ Doppelt oder nichts), Münzwurf, Spielautomat, Roulette, Blackjack,
+#         Tagesbonus + Bilanz (ein NPC), Bank, Börse. Alle Fenster haben einen einheitlichen Rahmen (✦ im Titel).
+#
+# ZUGANG: Jedes Spiel hat einen eigenen Befehl (siehe ganz unten, /casinorad usw.), der direkt das GUI öffnet.
+#   - Die Befehle haben die Permission bedwars.admin (für Spieler unsichtbar und gesperrt). Sie laufen über
+#     Citizens-NPCs, die sie als Konsole ausführen:   /npc command add casinorad <p>
+#   - Admins (bedwars.admin oder OP) dürfen die Befehle selbst tippen und /gamble (Hub) benutzen.
+#   - Aus den Spiel-Fenstern gibt es keinen Weg mehr in den Hub: der Button unten schließt nur das Fenster.
+#
+# Der Einsatz wird sofort abgezogen. Unterbricht ein Reload/Absturz ein Spiel, gibt Bedwars.sk (on load)
+# den Einsatz zurück ({bwg::pend::<uuid>}). {-bwg::spin::<uuid>} sperrt parallele Spiele.
+# Alle Klicks laufen über EINEN Handler: Items tragen am Ende der Lore "[g=spiel:aktion:wert]".
+options:
+    roulette_max: 5000
+    bj_max: 5000
+    daily_hours: 20
+    daily_base: 50
+    admin_perm: bedwars.admin
+
+# ---------------------------------------------------------
+# DESIGN-HELFER
+# ---------------------------------------------------------
+function bwGInner(t: text) :: item:
+    if {_t} is "bj":
+        return green stained glass pane named " "
+    if {_t} is "hub":
+        return gray stained glass pane named " "
+    return black stained glass pane named " "
+
+function bwGBorder(t: text) :: item:
+    if {_t} is "wheel":
+        return yellow stained glass pane named " "
+    if {_t} is "coin":
+        return orange stained glass pane named " "
+    if {_t} is "slot":
+        return light blue stained glass pane named " "
+    if {_t} is "rou":
+        return red stained glass pane named " "
+    if {_t} is "bj":
+        return lime stained glass pane named " "
+    if {_t} is "daily":
+        return lime stained glass pane named " "
+    if {_t} is "stat":
+        return blue stained glass pane named " "
+    return purple stained glass pane named " "
+
+function bwGAccent(t: text) :: item:
+    if {_t} is "wheel":
+        return orange stained glass pane named " "
+    if {_t} is "coin":
+        return yellow stained glass pane named " "
+    if {_t} is "slot":
+        return cyan stained glass pane named " "
+    if {_t} is "rou":
+        return black stained glass pane named " "
+    if {_t} is "bj":
+        return green stained glass pane named " "
+    if {_t} is "daily":
+        return yellow stained glass pane named " "
+    if {_t} is "stat":
+        return light blue stained glass pane named " "
+    return magenta stained glass pane named " "
+
+# Rahmen: Aussenrand in Themenfarbe, Ecken als Akzent, Innen dunkel
+function bwGPane(t: text, s: number, rows: number) :: item:
+    set {_r} to floor({_s} / 9)
+    set {_c} to mod({_s}, 9)
+    set {_last} to {_rows} - 1
+    set {_er} to false
+    if {_r} is 0:
+        set {_er} to true
+    if {_r} is {_last}:
+        set {_er} to true
+    set {_ec} to false
+    if {_c} is 0:
+        set {_ec} to true
+    if {_c} is 8:
+        set {_ec} to true
+    if {_er} is false:
+        if {_ec} is false:
+            return bwGInner({_t})
+    if {_er} is true:
+        if {_ec} is true:
+            return bwGAccent({_t})
+    return bwGBorder({_t})
+
+function bwGIsEdge(s: number, rows: number) :: boolean:
+    set {_r} to floor({_s} / 9)
+    set {_c} to mod({_s}, 9)
+    if {_r} is 0:
+        return true
+    if {_r} is ({_rows} - 1):
+        return true
+    if {_c} is 0:
+        return true
+    if {_c} is 8:
+        return true
+    return false
+
+# Einsatz-Chips in Casino-Farben
+function bwGChip(v: number) :: item:
+    if {_v} is 10:
+        return white concrete named "&f&l10 &7Punkte"
+    if {_v} is 50:
+        return lime concrete named "&a&l50 &7Punkte"
+    if {_v} is 100:
+        return cyan concrete named "&b&l100 &7Punkte"
+    if {_v} is 250:
+        return purple concrete named "&5&l250 &7Punkte"
+    if {_v} is 500:
+        return orange concrete named "&6&l500 &7Punkte"
+    return red concrete named "&c&l1000 &7Punkte"
+
+# Blinkender Rahmen am Ende eines Spiels (nur oben und an den Seiten, Buttons unten bleiben).
+# Sicherheit: schreibt NUR, wenn das offene Fenster ein Casino-Fenster (✦) ist.
+function bwGFlash(p: player, rows: number, good: boolean):
+    set {_n} to 0
+    while {_n} < 8:
+        add 1 to {_n}
+        if {_p} is not online:
+            stop
+        if "%name of {_p}'s current inventory%" does not contain "✦":
+            stop
+        set {_s} to 0
+        while {_s} < (({_rows} - 1) * 9):
+            if bwGIsEdge({_s}, {_rows}) is true:
+                if {_s} is not 4:
+                    set {_alt} to mod({_n} + {_s}, 2)
+                    if {_good} is true:
+                        if {_alt} is 0:
+                            set {_x} to yellow stained glass pane named " "
+                        else:
+                            set {_x} to lime stained glass pane named " "
+                    else:
+                        if {_alt} is 0:
+                            set {_x} to red stained glass pane named " "
+                        else:
+                            set {_x} to black stained glass pane named " "
+                    set slot {_s} of {_p}'s current inventory to {_x}
+            add 1 to {_s}
+        wait 3 ticks
+
+function bwGBox(p: player, game: text, bet: number, win: number, detail: text):
+    set {_u} to "%uuid of {_p}%"
+    set {_net} to {_win} - {_bet}
+    send " " to {_p}
+    send "&8&m          &r &6&l✦ %{_game}% ✦ &8&m          " to {_p}
+    send "&7%{_detail}%" to {_p}
+    if {_net} > 0:
+        send "&7Einsatz &e%{_bet}% &8➜ &7Auszahlung &e%{_win}% &8| &a&l+%{_net}% Punkte" to {_p}
+    else if {_net} is 0:
+        send "&7Einsatz &e%{_bet}% &8➜ &7Auszahlung &e%{_win}% &8| &e&l±0" to {_p}
+    else:
+        send "&7Einsatz &e%{_bet}% &8➜ &7Auszahlung &e%{_win}% &8| &c&l%{_net}% Punkte" to {_p}
+    send "&7Guthaben: &6&l%bwPts({_u})% Punkte" to {_p}
+    send "&8&m                                          " to {_p}
+
+# Töne, Titel und Partikel je nach Ergebnis
+function bwGFx(p: player, bet: number, win: number):
+    if {_p} is not online:
+        stop
+    set {_net} to {_win} - {_bet}
+    if {_win} >= ({_bet} * 10):
+        send title "&d&l✦ JACKPOT ✦" with subtitle "&e+%{_net}% Punkte" to {_p} for 4 seconds
+        play sound "entity.player.levelup" with volume 1 and pitch 1 to {_p}
+        play sound "ui.toast.challenge_complete" with volume 1 and pitch 1 to {_p}
+        loop 12 times:
+            draw totem of undying particle at ((location of {_p}) offset by vector(0, 1, 0))
+            wait 2 ticks
+    else if {_win} >= ({_bet} * 3):
+        send title "&a&l✦ GROSSER GEWINN ✦" with subtitle "&e+%{_net}% Punkte" to {_p} for 3 seconds
+        play sound "entity.player.levelup" with volume 1 and pitch 1.3 to {_p}
+        draw happy villager particle at ((location of {_p}) offset by vector(0, 1, 0))
+    else if {_net} > 0:
+        send action bar "&a&l✔ Gewonnen: +%{_net}% Punkte" to {_p}
+        play sound "entity.experience_orb.pickup" with volume 1 and pitch 1.4 to {_p}
+    else if {_net} is 0:
+        send action bar "&e&l± Einsatz zurück" to {_p}
+        play sound "block.note_block.bell" with volume 1 and pitch 1 to {_p}
+    else:
+        send action bar "&c&l✘ Verloren: %{_net}% Punkte" to {_p}
+        play sound "entity.villager.no" with volume 1 and pitch 1 to {_p}
+
+# Einsatz abziehen (mit Absturz-Schutz). Gibt false zurück, wenn der Einsatz nicht möglich ist.
+function bwGTake(p: player, bet: number) :: boolean:
+    set {_u} to "%uuid of {_p}%"
+    if {-bwg::spin::%{_u}%} is true:
+        return false
+    if {_bet} < 1:
+        return false
+    if bwPts({_u}) < {_bet}:
+        send action bar "&c✘ Nicht genug Punkte! Guthaben: %bwPts({_u})%" to {_p}
+        play sound "entity.villager.no" with volume 1 and pitch 1 to {_p}
+        return false
+    set {-bwg::spin::%{_u}%} to true
+    set {bwp::pts::%{_u}%} to bwPts({_u}) - {_bet}
+    set {bwg::pend::%{_u}%} to {_bet}
+    return true
+
+# Auszahlung, Absturz-Merker löschen, Statistik, Sperre lösen
+function bwGSettle(u: text, bet: number, win: number):
+    set {bwp::pts::%{_u}%} to bwPts({_u}) + {_win}
+    delete {bwg::pend::%{_u}%}
+    bwGambleRecord({_u}, {_bet}, {_win})
+    delete {-bwg::spin::%{_u}%}
+
+# ---------------------------------------------------------
+# STATISTIK
+# ---------------------------------------------------------
+function bwGStat(u: text, k: text) :: number:
+    if {bwp::g%{_k}%::%{_u}%} is not set:
+        return 0
+    return {bwp::g%{_k}%::%{_u}%}
+
+function bwGambleRecord(u: text, bet: number, win: number):
+    add 1 to {bwp::gplays::%{_u}%}
+    if {_win} > {_bet}:
+        add ({_win} - {_bet}) to {bwp::gwon::%{_u}%}
+        if ({_win} - {_bet}) > bwGStat({_u}, "best"):
+            set {bwp::gbest::%{_u}%} to {_win} - {_bet}
+    else if {_win} < {_bet}:
+        add ({_bet} - {_win}) to {bwp::glost::%{_u}%}
+
+function bwGambleStats(p: player):
+    set {_u} to "%uuid of {_p}%"
+    set {_won} to bwGStat({_u}, "won")
+    set {_lost} to bwGStat({_u}, "lost")
+    set {_bal} to {_won} - {_lost}
+    set {_inv} to chest inventory with 4 rows named "&9&l✦ &b&lGamble-Bilanz &9&l✦"
+    loop 36 times:
+        set {_s} to loop-number - 1
+        set slot {_s} of {_inv} to bwGPane("stat", {_s}, 4)
+    set {_x} to nether star named "&6&lDein Guthaben: &e%bwPts({_u})%"
+    set lore of {_x} to "&7Level: &6%bwLevelOf(bwXp({_u}))%" and "&7Bank: &e%bwBank({_u})%" and "&7Aktien-Depot: &e%bwStkValue({_u})%"
+    set slot 4 of {_inv} to {_x}
+    set {_x} to paper named "&f&lSpiele gespielt"
+    set lore of {_x} to "&e%bwGStat({_u}, "plays")% &7Runden insgesamt"
+    set slot 11 of {_inv} to {_x}
+    set {_x} to emerald named "&a&lGewonnen"
+    set lore of {_x} to "&a+%{_won}% &7Punkte Gewinn insgesamt"
+    set slot 12 of {_inv} to {_x}
+    set {_x} to redstone named "&c&lVerloren"
+    set lore of {_x} to "&c-%{_lost}% &7Punkte Verlust insgesamt"
+    set slot 13 of {_inv} to {_x}
+    if {_bal} >= 0:
+        set {_x} to gold ingot named "&a&lBilanz: +%{_bal}%"
+        set lore of {_x} to "&7Du bist insgesamt im &aPlus&7."
+    else:
+        set {_x} to iron ingot named "&c&lBilanz: %{_bal}%"
+        set lore of {_x} to "&7Du bist insgesamt im &cMinus&7."
+    set slot 14 of {_inv} to {_x}
+    set {_x} to diamond named "&b&lBester Gewinn"
+    set lore of {_x} to "&a+%bwGStat({_u}, "best")% &7Punkte (netto, eine Runde)"
+    set slot 15 of {_inv} to {_x}
+    set {_x} to gold nugget named "&e&lMünzwurf-Serie"
+    set lore of {_x} to "&7Aktuell: &e%bwGStat({_u}, "streak")%" and "&7Rekord: &e%bwGStat({_u}, "cbest")%"
+    set slot 21 of {_inv} to {_x}
+    set {_x} to clock named "&a&lTagesbonus-Serie"
+    set lore of {_x} to "&e%bwGStat({_u}, "dstreak")% &7Tage in Folge"
+    set slot 23 of {_inv} to {_x}
+    set {_x} to barrier named "&c&lSchließen"
+    set lore of {_x} to "&8[g=hub:close]"
+    set slot 31 of {_inv} to {_x}
+    set {_x} to clock named "&2&lTagesbonus"
+    set lore of {_x} to "&7Gratis-Punkte abholen" and " " and "&a▶ Klick zum Öffnen" and "&8[g=hub:daily]"
+    set slot 22 of {_inv} to {_x}
+
+    open {_inv} to {_p}
+
+# ---------------------------------------------------------
+# TAGESBONUS (Kalender)
+# ---------------------------------------------------------
+function bwGDailyAmount(day: number, lv: number) :: number:
+    return {@daily_base} + 10 * ({_day} - 1) + 2 * {_lv}
+
+function bwGDailyMenu(p: player):
+    set {_u} to "%uuid of {_p}%"
+    set {_lv} to bwLevelOf(bwXp({_u}))
+    set {_streak} to bwGStat({_u}, "dstreak")
+    set {_ready} to true
+    set {_rem} to 0 seconds
+    if {bwp::gdlast::%{_u}%} is set:
+        set {_d} to difference between {bwp::gdlast::%{_u}%} and now
+        if {_d} is less than {@daily_hours} hours:
+            set {_ready} to false
+            set {_rem} to {@daily_hours} hours - {_d}
+        if {_d} is greater than or equal to 48 hours:
+            set {_streak} to 0
+    else:
+        set {_streak} to 0
+    set {_inv} to chest inventory with 4 rows named "&a&l✦ &2&lTagesbonus &a&l✦"
+    loop 36 times:
+        set {_s} to loop-number - 1
+        set slot {_s} of {_inv} to bwGPane("daily", {_s}, 4)
+    set {_cur} to min({_streak}, 7)
+    set {_next} to min({_streak} + 1, 7)
+    set {_i} to 0
+    while {_i} < 7:
+        add 1 to {_i}
+        set {_sl} to 9 + {_i}
+        set {_amt} to bwGDailyAmount({_i}, {_lv})
+        if {_i} <= {_cur}:
+            if {_ready} is false:
+                set {_x} to lime concrete named "&a&l✔ Tag %{_i}%"
+                set lore of {_x} to "&7Erhalten: &e+%{_amt}% Punkte"
+            else:
+                set {_x} to lime concrete named "&a&l✔ Tag %{_i}%"
+                set lore of {_x} to "&7Schon abgeholt"
+        else if {_i} is {_next}:
+            if {_ready} is true:
+                set {_x} to yellow concrete named "&e&l► Tag %{_i}% &7(heute!)"
+                set lore of {_x} to "&7Belohnung: &e+%{_amt}% Punkte"
+            else:
+                set {_x} to orange concrete named "&6Tag %{_i}% &7(morgen)"
+                set lore of {_x} to "&7Belohnung: &e+%{_amt}% Punkte"
+        else:
+            set {_x} to gray concrete named "&7Tag %{_i}%"
+            set lore of {_x} to "&7Belohnung: &e+%{_amt}% Punkte"
+        set slot {_sl} of {_inv} to {_x}
+    if {_ready} is true:
+        set {_x} to chest named "&a&lJetzt abholen!"
+        set lore of {_x} to "&7Tag &e%{_next}% &7in Folge: &e+%bwGDailyAmount({_next}, {_lv})% Punkte" and "&7Der Bonus wächst mit Serie und Level." and " " and "&aKlick zum Abholen" and "&8[g=daily:claim]"
+    else:
+        set {_x} to barrier named "&c&lNoch nicht bereit"
+        set lore of {_x} to "&7Nächster Bonus in &e%{_rem}%"
+    set slot 22 of {_inv} to {_x}
+    set {_x} to nether star named "&6&lGuthaben: &e%bwPts({_u})%"
+    set lore of {_x} to "&7Serie: &e%{_streak}% &7Tage" and "&7Level: &6%{_lv}%"
+    set slot 4 of {_inv} to {_x}
+    set {_x} to barrier named "&c&lSchließen"
+    set lore of {_x} to "&8[g=hub:close]"
+    set slot 31 of {_inv} to {_x}
+    set {_x} to writable book named "&9&lBilanz"
+    set lore of {_x} to "&7Deine Gamble-Statistik" and " " and "&a▶ Klick zum Öffnen" and "&8[g=hub:stats]"
+    set slot 24 of {_inv} to {_x}
+
+    open {_inv} to {_p}
+
+function bwGDailyClaim(p: player):
+    set {_u} to "%uuid of {_p}%"
+    if {bwp::gdlast::%{_u}%} is set:
+        set {_d} to difference between {bwp::gdlast::%{_u}%} and now
+        if {_d} is less than {@daily_hours} hours:
+            send action bar "&c✘ Dein Tagesbonus ist noch nicht bereit." to {_p}
+            play sound "entity.villager.no" with volume 1 and pitch 1 to {_p}
+            stop
+        if {_d} is less than 48 hours:
+            add 1 to {bwp::gdstreak::%{_u}%}
+        else:
+            set {bwp::gdstreak::%{_u}%} to 1
+    else:
+        set {bwp::gdstreak::%{_u}%} to 1
+    set {bwp::gdlast::%{_u}%} to now
+    set {_s} to {bwp::gdstreak::%{_u}%}
+    set {_lv} to bwLevelOf(bwXp({_u}))
+    set {_amt} to bwGDailyAmount(min({_s}, 7), {_lv})
+    set {bwp::pts::%{_u}%} to bwPts({_u}) + {_amt}
+    send title "&a&l✦ TAGESBONUS ✦" with subtitle "&7Tag &e%{_s}% &7in Folge: &e+%{_amt}% Punkte" to {_p} for 3 seconds
+    send "&a&lTagesbonus! &7Tag &e%{_s}% &7in Folge: &e+%{_amt}% Punkte &8| &7Guthaben: &e%bwPts({_u})%" to {_p}
+    play sound "entity.player.levelup" with volume 1 and pitch 1.4 to {_p}
+
+# ---------------------------------------------------------
+# EINSATZ-MENÜ (für Rad, Münzwurf, Slots, Roulette, Blackjack)
+# ---------------------------------------------------------
+function bwGBetMenu(p: player, game: text):
+    set {_u} to "%uuid of {_p}%"
+    set {_max} to 0
+    if {_game} is "wheel":
+        set {_title} to "&6&l✦ &e&lGlücksrad &6&l✦ &8- &7Einsatz"
+        set {_theme} to "wheel"
+        set {_x} to nether star named "&6&lGlücksrad"
+        set lore of {_x} to "&7Felder: &c8x x0 &8| &64x x0.5 &8| &e2x x1" and "&a2x x2 &8| &b1x x3 &8| &d&l1x x5" and "&7Im Schnitt ca. &e89%% &7Auszahlung" and "&7Nach einem Gewinn: &cDoppelt oder nichts"
+    else if {_game} is "coin":
+        set {_title} to "&6&l✦ &e&lMünzwurf &6&l✦ &8- &7Einsatz"
+        set {_theme} to "coin"
+        set {_x} to gold ingot named "&e&lMünzwurf"
+        set lore of {_x} to "&7Kopf oder Zahl: &e190%% &7Auszahlung" and "&7Serienbonus: &a+5%% &7pro Sieg (max. +25%%)" and "&7Deine Serie: &e%bwGStat({_u}, "streak")%"
+    else if {_game} is "slot":
+        set {_title} to "&b&l✦ &3&lSpielautomat &b&l✦ &8- &7Einsatz"
+        set {_theme} to "slot"
+        set {_x} to diamond named "&b&lSpielautomat"
+        set lore of {_x} to "&7Drei Sieben: &d&lx50" and "&7Drei gleiche: &ax10" and "&7Genau zwei gleiche: &eEinsatz zurück" and "&7Sonst: &cverloren"
+    else if {_game} is "rou":
+        set {_max} to {@roulette_max}
+        set {_title} to "&4&l✦ &c&lRoulette &4&l✦ &8- &7Einsatz"
+        set {_theme} to "rou"
+        set {_x} to book named "&c&lDeine Wette: %bwRouLabel({-bwg::rtype::%{_u}%})%"
+        set lore of {_x} to "&7Einsatz: 10 bis &e{@roulette_max} &7Punkte" and "&7Bei der &a0 &7verlieren alle Aussenwetten"
+    else:
+        set {_max} to {@bj_max}
+        set {_title} to "&2&l✦ &a&lBlackjack &2&l✦ &8- &7Einsatz"
+        set {_theme} to "bj"
+        set {_x} to paper named "&a&lBlackjack"
+        set lore of {_x} to "&7Näher an 21 als der Dealer gewinnt" and "&7Blackjack zahlt &dx2.5 &8| &7Sieg &ax2" and "&7Einsatz: 10 bis &e{@bj_max} &7Punkte"
+    set {_inv} to chest inventory with 5 rows named {_title}
+    loop 45 times:
+        set {_s} to loop-number - 1
+        set slot {_s} of {_inv} to bwGPane({_theme}, {_s}, 5)
+    set slot 13 of {_inv} to {_x}
+    set {_y} to nether star named "&6&lGuthaben: &e%bwPts({_u})% Punkte"
+    set lore of {_y} to "&7Level: &6%bwLevelOf(bwXp({_u}))%"
+    set slot 4 of {_inv} to {_y}
+    if {_game} is "coin":
+        set {_side} to {-bwg::cside::%{_u}%}
+        if {_side} is not set:
+            set {_side} to "H"
+        if {_side} is "H":
+            set {_y} to gold ingot named "&6&l► KOPF ◄"
+            set lore of {_y} to "&aAusgewählt"
+        else:
+            set {_y} to gold ingot named "&6Kopf"
+            set lore of {_y} to "&7Klick zum Wählen" and "&8[g=coin:side:H]"
+        set slot 11 of {_inv} to {_y}
+        if {_side} is "T":
+            set {_y} to iron ingot named "&b&l► ZAHL ◄"
+            set lore of {_y} to "&aAusgewählt"
+        else:
+            set {_y} to iron ingot named "&bZahl"
+            set lore of {_y} to "&7Klick zum Wählen" and "&8[g=coin:side:T]"
+        set slot 15 of {_inv} to {_y}
+    set {_n} to 0
+    loop 10, 50, 100, 250, 500 and 1000:
+        set {_v} to loop-value
+        set {_c} to bwGChip({_v})
+        if bwPts({_u}) < {_v}:
+            set lore of {_c} to "&7Einsatz: &e%{_v}% Punkte" and "&c✘ Nicht genug Punkte" and "&8[g=%{_game}%:bet:%{_v}%]"
+        else:
+            set lore of {_c} to "&7Einsatz: &e%{_v}% Punkte" and "&7Danach: &e%bwPts({_u}) - {_v}% Punkte" and " " and "&a▶ Klick zum Spielen" and "&8[g=%{_game}%:bet:%{_v}%]"
+        set {_sl} to 19 + {_n}
+        set slot {_sl} of {_inv} to {_c}
+        add 1 to {_n}
+    set {_c} to nether star named "&c&l✦ ALL IN ✦"
+    if {_max} > 0:
+        set lore of {_c} to "&7Dein ganzes Guthaben (max. &e%{_max}%&7)" and " " and "&a▶ Klick zum Spielen" and "&8[g=%{_game}%:all]"
+    else:
+        set lore of {_c} to "&7Dein ganzes Guthaben: &e%bwPts({_u})%" and " " and "&a▶ Klick zum Spielen" and "&8[g=%{_game}%:all]"
+    set slot 25 of {_inv} to {_c}
+    if {_game} is "rou":
+        set {_y} to arrow named "&7Andere Wette"
+        set lore of {_y} to "&8[g=rou:menu]"
+    else:
+        set {_y} to barrier named "&c&lSchließen"
+        set lore of {_y} to "&8[g=hub:close]"
+    set slot 40 of {_inv} to {_y}
+    open {_inv} to {_p}
+
+# ---------------------------------------------------------
+# CASINO-HUB
+# ---------------------------------------------------------
+function bwGambleHub(p: player):
+    set {_u} to "%uuid of {_p}%"
+    set {_inv} to chest inventory with 6 rows named "&5&l✦ &d&lCasino &8- &7Gamble-Hub &5&l✦"
+    loop 54 times:
+        set {_s} to loop-number - 1
+        set slot {_s} of {_inv} to bwGPane("hub", {_s}, 6)
+    set {_bal} to bwGStat({_u}, "won") - bwGStat({_u}, "lost")
+    set {_x} to nether star named "&6&lDein Guthaben: &e%bwPts({_u})% Punkte"
+    set lore of {_x} to "&7Level: &6%bwLevelOf(bwXp({_u}))%" and "&7Bank: &e%bwBank({_u})% &8| &7Depot: &e%bwStkValue({_u})%" and "&7Casino-Bilanz: &e%{_bal}%" and "&8Punkte verdienst du in Runden."
+    set slot 4 of {_inv} to {_x}
+    set {_x} to nether star named "&6&lGlücksrad"
+    set lore of {_x} to "&7Dreh am Rad: bis zu &d&lx5" and "&7Danach: &cDoppelt oder nichts" and " " and "&a▶ Klick zum Spielen" and "&8[g=hub:wheel]"
+    set slot 20 of {_inv} to {_x}
+    set {_x} to gold ingot named "&e&lMünzwurf"
+    set lore of {_x} to "&7Kopf oder Zahl: &e190%% &7Auszahlung" and "&7Serienbonus bis &a+25%%" and " " and "&a▶ Klick zum Spielen" and "&8[g=hub:coin]"
+    set slot 22 of {_inv} to {_x}
+    set {_x} to diamond named "&b&lSpielautomat"
+    set lore of {_x} to "&7Drei Sieben: &d&lx50" and "&7Drei gleiche: &ax10" and " " and "&a▶ Klick zum Spielen" and "&8[g=hub:slot]"
+    set slot 24 of {_inv} to {_x}
+    set {_x} to red concrete named "&c&lRoulette"
+    set lore of {_x} to "&7Rot/Schwarz, Dutzend, Einzelzahl" and "&7Bis zu &d&lx36" and " " and "&a▶ Klick zum Spielen" and "&8[g=hub:rou]"
+    set slot 29 of {_inv} to {_x}
+    set {_x} to paper named "&a&lBlackjack"
+    set lore of {_x} to "&7Gegen den Dealer, Blackjack &dx2.5" and "&7Karte, Halten, Verdoppeln" and " " and "&a▶ Klick zum Spielen" and "&8[g=hub:bj]"
+    set slot 31 of {_inv} to {_x}
+    set {_x} to clock named "&2&lTagesbonus"
+    set lore of {_x} to "&7Alle {@daily_hours} Stunden gratis Punkte" and "&7Serie: &e%bwGStat({_u}, "dstreak")% &7Tage" and " " and "&a▶ Klick zum Abholen" and "&8[g=hub:daily]"
+    set slot 33 of {_inv} to {_x}
+    set {_x} to gold block named "&6&lBank"
+    set lore of {_x} to "&7Punkte anlegen, Zinsen kassieren" and "&7Konto: &e%bwBank({_u})%" and " " and "&a▶ Klick zum Öffnen" and "&8[g=hub:bank]"
+    set slot 38 of {_inv} to {_x}
+    set {_x} to writable book named "&9&lBilanz"
+    set lore of {_x} to "&7Deine Gamble-Statistik" and " " and "&a▶ Klick zum Öffnen" and "&8[g=hub:stats]"
+    set slot 40 of {_inv} to {_x}
+    set {_x} to emerald named "&2&lBörse"
+    set lore of {_x} to "&7Aktien kaufen und verkaufen" and "&7Depot: &e%bwStkValue({_u})%" and " " and "&a▶ Klick zum Öffnen" and "&8[g=hub:stocks]"
+    set slot 42 of {_inv} to {_x}
+    set {_x} to barrier named "&c&lSchließen"
+    set lore of {_x} to "&8[g=hub:close]"
+    set slot 49 of {_inv} to {_x}
+    open {_inv} to {_p}
+    play sound "block.note_block.chime" with volume 0.6 and pitch 1.4 to {_p}
+
+
+# ---------------------------------------------------------
+# GLÜCKSRAD  (18 Felder: 8x x0, 4x x0.5, 2x x1, 2x x2, 1x x3, 1x x5 -> ca. 89 %)
+# ---------------------------------------------------------
+function bwWheelMult(i: number) :: number:
+    if {_i} is 1 or 3 or 5 or 7 or 10 or 13 or 15 or 17:
+        return 0
+    if {_i} is 2 or 8 or 11 or 16:
+        return 0.5
+    if {_i} is 6 or 14:
+        return 1
+    if {_i} is 4 or 12:
+        return 2
+    if {_i} is 18:
+        return 3
+    return 5
+
+# Slots des Rades (Ring im 6-Reihen-Inventar)
+function bwWheelSlot(i: number) :: number:
+    set {_s::*} to 10, 11, 12, 13, 14, 15, 16, 25, 34, 43, 42, 41, 40, 39, 38, 37, 28 and 19
+    return {_s::%{_i}%}
+
+function bwWheelItem(i: number) :: item:
+    set {_m} to bwWheelMult({_i})
+    if {_m} is 0:
+        set {_x} to red stained glass pane named "&c✘ &7x0 &8(verloren)"
+    else if {_m} is 0.5:
+        set {_x} to orange stained glass pane named "&6x0.5 &8(Hälfte zurück)"
+    else if {_m} is 1:
+        set {_x} to yellow stained glass pane named "&ex1 &8(Einsatz zurück)"
+    else if {_m} is 2:
+        set {_x} to lime stained glass pane named "&ax2 &8(Doppelt)"
+    else if {_m} is 3:
+        set {_x} to cyan stained glass pane named "&bx3 &8(Dreifach)"
+    else:
+        set {_x} to magenta stained glass pane named "&d&lx5 JACKPOT"
+    return {_x}
+
+function bwWheelSpin(p: player, bet: number):
+    if bwGTake({_p}, {_bet}) is not true:
+        stop
+    set {_u} to "%uuid of {_p}%"
+    set {-bwg::last::%{_u}%} to {_bet}
+    delete {-bwg::dbl::%{_u}%}
+    set {_inv} to chest inventory with 6 rows named "&6&l✦ &e&lGlücksrad &6&l✦ &8- &7Dreht sich ..."
+    loop 54 times:
+        set {_s} to loop-number - 1
+        set slot {_s} of {_inv} to bwGPane("wheel", {_s}, 6)
+    # Felder VOR dem Drehen berechnen (nach einem Reload sind Funktionsaufrufe in der Wartezeit nicht mehr möglich)
+    loop 18 times:
+        set {_slot::%loop-number%} to bwWheelSlot(loop-number)
+        set {_itm::%loop-number%} to bwWheelItem(loop-number)
+        set {_mul::%loop-number%} to bwWheelMult(loop-number)
+        set slot {_slot::%loop-number%} of {_inv} to {_itm::%loop-number%}
+    set {_x} to gold ingot named "&6&lEinsatz: &e%{_bet}% Punkte"
+    set lore of {_x} to "&7Viel Glück!"
+    set slot 31 of {_inv} to {_x}
+    open {_inv} to {_p}
+    play sound "block.note_block.pling" with volume 0.7 and pitch 1.2 to {_p}
+    set {_w} to a random integer between 1 and 18
+    set {_st} to a random integer between 1 and 18
+    set {_n} to 36 + mod({_w} - {_st} + 18, 18)
+    set {_cur} to {_st}
+    wait 10 ticks
+    loop {_n} times:
+        set {_i} to loop-number
+        set slot {_slot::%{_cur}%} of {_inv} to {_itm::%{_cur}%}
+        set {_cur} to mod({_cur}, 18) + 1
+        set slot {_slot::%{_cur}%} of {_inv} to white stained glass pane named "&f&l► ◄"
+        if {_p} is online:
+            play sound "block.note_block.hat" with volume 0.6 and pitch 1.6 to {_p}
+        set {_rem} to {_n} - {_i}
+        set {_d} to 2
+        if {_rem} < 12:
+            set {_d} to 2 + floor((12 - {_rem}) / 2)
+        wait ({_d} * 1 tick)
+    set {_m} to {_mul::%{_w}%}
+    set {_win} to floor({_bet} * {_m})
+    set {_net} to {_win} - {_bet}
+    bwGSettle({_u}, {_bet}, {_win})
+    set slot {_slot::%{_w}%} of {_inv} to {_itm::%{_w}%}
+    if {_m} is 0:
+        set {_r} to barrier named "&c&l✘ VERLOREN"
+        set lore of {_r} to "&7Du verlierst &c%{_bet}% Punkte&7."
+    else if {_net} > 0:
+        set {_r} to emerald named "&a&l✔ GEWONNEN! &7(x%{_m}%)"
+        set lore of {_r} to "&7Gewinn: &a+%{_net}% Punkte" and "&7Auszahlung: &e%{_win}%"
+    else if {_net} is 0:
+        set {_r} to gold ingot named "&e&l± EINSATZ ZURÜCK"
+        set lore of {_r} to "&7Du bekommst deinen Einsatz zurück."
+    else:
+        set {_r} to redstone named "&6&lTEILVERLUST &7(x%{_m}%)"
+        set lore of {_r} to "&7Verlust: &c%{_net}% Punkte" and "&7Auszahlung: &e%{_win}%"
+    set slot 31 of {_inv} to {_r}
+    set {_x} to nether star named "&6&lGuthaben: &e%bwPts({_u})% Punkte"
+    set slot 4 of {_inv} to {_x}
+    set {_x} to lime dye named "&a▶ Nochmal (&e%{_bet}% Punkte&a)"
+    set lore of {_x} to "&7Gleicher Einsatz" and "&8[g=wheel:again]"
+    set slot 48 of {_inv} to {_x}
+    set {_x} to arrow named "&7Anderer Einsatz"
+    set lore of {_x} to "&8[g=wheel:menu]"
+    set slot 50 of {_inv} to {_x}
+    set {_x} to barrier named "&c&lSchließen"
+    set lore of {_x} to "&8[g=hub:close]"
+    set slot 45 of {_inv} to {_x}
+    if {_win} > 0:
+        set {-bwg::dbl::%{_u}%} to {_win}
+        set {_x} to blaze powder named "&c&l✦ Doppelt oder nichts ✦"
+        set lore of {_x} to "&7Setze deinen Gewinn von &e%{_win}% Punkten" and "&7Gewinnchance: &e45%%" and "&7Gewinn: &ax2 &7| Verlust: &c-%{_win}%" and "&8[g=wheel:double]"
+        set slot 47 of {_inv} to {_x}
+    bwGBox({_p}, "GLÜCKSRAD", {_bet}, {_win}, "Das Rad zeigt x%{_m}%.")
+    bwGFx({_p}, {_bet}, {_win})
+    if {_m} is 5:
+        broadcast "&6&l%{_p}% &ehat beim Glücksrad den &d&l✦ x5 JACKPOT ✦ &egewonnen! &7(+%{_win}% Punkte)"
+    set {_good} to false
+    if {_win} > {_bet}:
+        set {_good} to true
+    bwGFlash({_p}, 6, {_good})
+
+# Doppelt oder nichts (nach einem Glücksrad-Gewinn, 45 %)
+function bwGambleDouble(p: player):
+    set {_u} to "%uuid of {_p}%"
+    set {_amt} to {-bwg::dbl::%{_u}%}
+    if {_amt} is not set:
+        stop
+    delete {-bwg::dbl::%{_u}%}
+    if bwPts({_u}) < {_amt}:
+        stop
+    set {_roll} to a random integer between 1 and 100
+    if {_roll} <= 45:
+        set {bwp::pts::%{_u}%} to bwPts({_u}) + {_amt}
+        bwGambleRecord({_u}, {_amt}, {_amt} * 2)
+        set {_r} to emerald named "&a&l✔ VERDOPPELT! &7(+%{_amt}%)"
+        send "&6&l✦ Doppelt oder nichts ✦ &aGeschafft! &e+%{_amt}% Punkte &7| Guthaben: &e%bwPts({_u})%" to {_p}
+        play sound "entity.player.levelup" with volume 1 and pitch 1.2 to {_p}
+    else:
+        set {bwp::pts::%{_u}%} to bwPts({_u}) - {_amt}
+        bwGambleRecord({_u}, {_amt}, 0)
+        set {_r} to barrier named "&c&l✘ ALLES WEG &7(-%{_amt}%)"
+        send "&6&l✦ Doppelt oder nichts ✦ &cLeider verloren: &e-%{_amt}% Punkte &7| Guthaben: &e%bwPts({_u})%" to {_p}
+        play sound "entity.villager.no" with volume 1 and pitch 1 to {_p}
+    set slot 47 of {_p}'s current inventory to {_r}
+    set {_x} to nether star named "&6&lGuthaben: &e%bwPts({_u})% Punkte"
+    set slot 4 of {_p}'s current inventory to {_x}
+
+# ---------------------------------------------------------
+# MÜNZWURF  (Kopf/Zahl, 190 %, +5 % pro Sieg in Folge, max. +25 %)
+# ---------------------------------------------------------
+function bwCoinFlip(p: player, bet: number, side: text):
+    if bwGTake({_p}, {_bet}) is not true:
+        stop
+    set {_u} to "%uuid of {_p}%"
+    set {-bwg::clastbet::%{_u}%} to {_bet}
+    set {-bwg::cside::%{_u}%} to {_side}
+    set {_inv} to chest inventory with 5 rows named "&6&l✦ &e&lMünzwurf &6&l✦ &8- &7Die Münze fliegt ..."
+    loop 45 times:
+        set {_s} to loop-number - 1
+        set slot {_s} of {_inv} to bwGPane("coin", {_s}, 5)
+    set {_x} to gold ingot named "&6&lEinsatz: &e%{_bet}% Punkte"
+    set slot 4 of {_inv} to {_x}
+    if {_side} is "H":
+        set {_x} to gold ingot named "&6Deine Wahl: &lKOPF"
+    else:
+        set {_x} to iron ingot named "&bDeine Wahl: &lZAHL"
+    set slot 20 of {_inv} to {_x}
+    set {_x} to gray stained glass pane named "&7▼"
+    set slot 13 of {_inv} to {_x}
+    open {_inv} to {_p}
+    play sound "entity.arrow.shoot" with volume 0.6 and pitch 1.5 to {_p}
+    # 0 = Kopf, 1 = Zahl. Die Münze wechselt bei jedem Schritt die Seite (ungerade = Kopf, gerade = Zahl)
+    set {_res} to a random integer between 0 and 1
+    set {_n} to 18
+    if {_res} is 0:
+        set {_n} to 19
+    wait 8 ticks
+    loop {_n} times:
+        set {_i} to loop-number
+        if mod({_i}, 2) is 1:
+            set {_c} to gold ingot named "&6&l● KOPF ●"
+        else:
+            set {_c} to iron ingot named "&b&l● ZAHL ●"
+        set slot 22 of {_inv} to {_c}
+        if {_p} is online:
+            play sound "block.note_block.hat" with volume 0.6 and pitch 1.5 to {_p}
+        set {_rem} to {_n} - {_i}
+        set {_d} to 2
+        if {_rem} < 8:
+            set {_d} to 2 + (8 - {_rem})
+        wait ({_d} * 1 tick)
+    set {_won} to false
+    if {_res} is 0:
+        if {_side} is "H":
+            set {_won} to true
+    else:
+        if {_side} is "T":
+            set {_won} to true
+    set {_win} to 0
+    set {_pct} to 190
+    set {_streak} to 0
+    if {_won} is true:
+        add 1 to {bwp::gstreak::%{_u}%}
+        set {_streak} to {bwp::gstreak::%{_u}%}
+        if {_streak} > bwGStat({_u}, "cbest"):
+            set {bwp::gcbest::%{_u}%} to {_streak}
+        set {_pct} to 190 + 5 * min({_streak} - 1, 5)
+        set {_win} to floor({_bet} * {_pct} / 100)
+    else:
+        set {bwp::gstreak::%{_u}%} to 0
+    bwGSettle({_u}, {_bet}, {_win})
+    if {_won} is true:
+        set {_r} to emerald named "&a&l✔ GEWONNEN! &7(%{_pct}%%%)"
+        set lore of {_r} to "&7Gewinn: &a+%{_win} - {_bet}% Punkte" and "&7Serie: &e%{_streak}%"
+    else:
+        set {_r} to barrier named "&c&l✘ VERLOREN"
+        set lore of {_r} to "&7Du verlierst &c%{_bet}% Punkte&7." and "&7Die Serie ist vorbei."
+    set slot 31 of {_inv} to {_r}
+    set {_x} to nether star named "&6&lGuthaben: &e%bwPts({_u})% Punkte"
+    set slot 4 of {_inv} to {_x}
+    set {_x} to lime dye named "&a▶ Nochmal (&e%{_bet}% Punkte&a)"
+    set lore of {_x} to "&7Gleiche Seite, gleicher Einsatz" and "&8[g=coin:again]"
+    set slot 42 of {_inv} to {_x}
+    set {_x} to barrier named "&c&lSchließen"
+    set lore of {_x} to "&8[g=hub:close]"
+    set slot 38 of {_inv} to {_x}
+    set {_ft} to "KOPF"
+    if {_res} is 1:
+        set {_ft} to "ZAHL"
+    bwGBox({_p}, "MÜNZWURF", {_bet}, {_win}, "Die Münze zeigt %{_ft}%. Serie: %{_streak}%")
+    bwGFx({_p}, {_bet}, {_win})
+    bwGFlash({_p}, 5, {_won})
+
+# ---------------------------------------------------------
+# SPIELAUTOMAT  (3 Walzen: 3 gleiche x10, 3 Sieben x50, genau 2 gleiche = Einsatz zurück)
+# ---------------------------------------------------------
+function bwSlotSym(i: number) :: item:
+    if {_i} is 1:
+        return apple named "&c&lApfel"
+    if {_i} is 2:
+        return melon slice named "&a&lMelone"
+    if {_i} is 3:
+        return gold ingot named "&6&lGoldbarren"
+    if {_i} is 4:
+        return diamond named "&b&lDiamant"
+    if {_i} is 5:
+        return emerald named "&2&lSmaragd"
+    return nether star named "&d&l✦ 7 ✦"
+
+function bwSlotWord(i: number) :: text:
+    if {_i} is 1:
+        return "Apfel"
+    if {_i} is 2:
+        return "Melone"
+    if {_i} is 3:
+        return "Gold"
+    if {_i} is 4:
+        return "Diamant"
+    if {_i} is 5:
+        return "Smaragd"
+    return "7"
+
+function bwSlotSpin(p: player, bet: number):
+    if bwGTake({_p}, {_bet}) is not true:
+        stop
+    set {_u} to "%uuid of {_p}%"
+    set {-bwg::slastbet::%{_u}%} to {_bet}
+    set {_inv} to chest inventory with 5 rows named "&b&l✦ &3&lSpielautomat &b&l✦ &8- &7Die Walzen drehen sich ..."
+    loop 45 times:
+        set {_s} to loop-number - 1
+        set slot {_s} of {_inv} to bwGPane("slot", {_s}, 5)
+    set {_x} to gold ingot named "&6&lEinsatz: &e%{_bet}% Punkte"
+    set slot 4 of {_inv} to {_x}
+    set {_x} to lime stained glass pane named "&a&l▶ Gewinnlinie"
+    set slot 18 of {_inv} to {_x}
+    set {_x} to lime stained glass pane named "&a&l◀ Gewinnlinie"
+    set slot 26 of {_inv} to {_x}
+    open {_inv} to {_p}
+    play sound "block.piston.extend" with volume 0.6 and pitch 1.5 to {_p}
+    # Endsymbole der drei Walzen
+    set {_a} to a random integer between 1 and 6
+    set {_b} to a random integer between 1 and 6
+    set {_c} to a random integer between 1 and 6
+    set {_fin::1} to {_a}
+    set {_fin::2} to {_b}
+    set {_fin::3} to {_c}
+    # Walze k: oben (up), Mitte (mid), unten (dn). Walze 1 stoppt nach 12, 2 nach 20, 3 nach 30 Schritten
+    set {_stop::1} to 12
+    set {_stop::2} to 20
+    set {_stop::3} to 30
+    set {_up::1} to a random integer between 1 and 6
+    set {_up::2} to a random integer between 1 and 6
+    set {_up::3} to a random integer between 1 and 6
+    set {_mid::1} to a random integer between 1 and 6
+    set {_mid::2} to a random integer between 1 and 6
+    set {_mid::3} to a random integer between 1 and 6
+    set {_dn::1} to a random integer between 1 and 6
+    set {_dn::2} to a random integer between 1 and 6
+    set {_dn::3} to a random integer between 1 and 6
+    wait 8 ticks
+    set {_i} to 0
+    while {_i} < 30:
+        add 1 to {_i}
+        set {_k} to 0
+        while {_k} < 3:
+            add 1 to {_k}
+            if {_i} <= {_stop::%{_k}%}:
+                set {_dn::%{_k}%} to {_mid::%{_k}%}
+                set {_mid::%{_k}%} to {_up::%{_k}%}
+                set {_up::%{_k}%} to a random integer between 1 and 6
+                if {_i} is {_stop::%{_k}%}:
+                    set {_mid::%{_k}%} to {_fin::%{_k}%}
+            set {_col} to 2 * {_k}
+            set {_su} to 9 + {_col}
+            set {_sm} to 18 + {_col}
+            set {_sd} to 27 + {_col}
+            set slot {_su} of {_inv} to bwSlotSym({_up::%{_k}%})
+            set slot {_sm} of {_inv} to bwSlotSym({_mid::%{_k}%})
+            set slot {_sd} of {_inv} to bwSlotSym({_dn::%{_k}%})
+        if {_p} is online:
+            play sound "block.note_block.hat" with volume 0.5 and pitch 1.4 to {_p}
+        set {_d} to 3
+        if {_i} > 20:
+            set {_d} to 5
+        if {_i} > 26:
+            set {_d} to 8
+        wait ({_d} * 1 tick)
+    set {_m} to 0
+    if {_a} is {_b}:
+        if {_b} is {_c}:
+            set {_m} to 10
+            if {_a} is 6:
+                set {_m} to 50
+        else:
+            set {_m} to 1
+    else if {_a} is {_c}:
+        set {_m} to 1
+    else if {_b} is {_c}:
+        set {_m} to 1
+    set {_win} to {_bet} * {_m}
+    bwGSettle({_u}, {_bet}, {_win})
+    if {_m} is 0:
+        set {_r} to barrier named "&c&l✘ VERLOREN"
+        set lore of {_r} to "&7Du verlierst &c%{_bet}% Punkte&7."
+    else if {_m} is 1:
+        set {_r} to gold ingot named "&e&l± PAAR &7- Einsatz zurück"
+        set lore of {_r} to "&7Du bekommst &e%{_win}% Punkte &7zurück."
+    else if {_m} is 10:
+        set {_r} to emerald named "&a&l✔ DREI GLEICHE &7(x10)"
+        set lore of {_r} to "&7Gewinn: &a+%{_win} - {_bet}% Punkte"
+    else:
+        set {_r} to nether star named "&d&l✦ JACKPOT ✦ &7(x50)"
+        set lore of {_r} to "&7Gewinn: &a+%{_win} - {_bet}% Punkte"
+    set slot 40 of {_inv} to {_r}
+    set {_x} to nether star named "&6&lGuthaben: &e%bwPts({_u})% Punkte"
+    set slot 4 of {_inv} to {_x}
+    set {_x} to lime dye named "&a▶ Nochmal (&e%{_bet}% Punkte&a)"
+    set lore of {_x} to "&7Gleicher Einsatz" and "&8[g=slot:again]"
+    set slot 42 of {_inv} to {_x}
+    set {_x} to barrier named "&c&lSchließen"
+    set lore of {_x} to "&8[g=hub:close]"
+    set slot 38 of {_inv} to {_x}
+    bwGBox({_p}, "SPIELAUTOMAT", {_bet}, {_win}, "Walzen: %bwSlotWord({_a})% | %bwSlotWord({_b})% | %bwSlotWord({_c})%")
+    bwGFx({_p}, {_bet}, {_win})
+    if {_m} is 50:
+        broadcast "&6&l%{_p}% &ehat am Spielautomaten den &d&l✦ x50 JACKPOT ✦ &egewonnen! &7(+%{_win}% Punkte)"
+    set {_good} to false
+    if {_win} > {_bet}:
+        set {_good} to true
+    bwGFlash({_p}, 5, {_good})
+
+
+# ---------------------------------------------------------
+# ROULETTE  (Europäisch, 37 Felder; Rot/Schwarz, Gerade/Ungerade, 1-18/19-36 x2; Dutzend x3; Zahl x36)
+# ---------------------------------------------------------
+function bwRouColor(n: number) :: text:
+    if {_n} is 0:
+        return "green"
+    if ",1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36," contains ",%{_n}%,":
+        return "red"
+    return "black"
+
+# Feld an Position i des Rades (zyklisch, Position 1 = Zahl 0)
+function bwRouNum(i: number) :: number:
+    set {_w::*} to 0, 32, 15, 19, 4, 21, 2, 25, 17, 34, 6, 27, 13, 36, 11, 30, 8, 23, 10, 5, 24, 16, 33, 1, 20, 14, 31, 9, 22, 18, 29, 7, 28, 12, 35, 3 and 26
+    set {_k} to mod({_i} - 1 + 3700, 37) + 1
+    return {_w::%{_k}%}
+
+function bwRouItem(n: number) :: item:
+    set {_c} to bwRouColor({_n})
+    if {_c} is "red":
+        set {_x} to red concrete named "&c&l%{_n}%"
+    else if {_c} is "black":
+        set {_x} to black concrete named "&8&l%{_n}%"
+    else:
+        set {_x} to lime concrete named "&a&l0"
+    if {_n} > 0:
+        set item amount of {_x} to {_n}
+    return {_x}
+
+function bwRouLabel(t: text) :: text:
+    if {_t} is "red":
+        return "&cRot &8(x2)"
+    if {_t} is "black":
+        return "&8Schwarz &8(x2)"
+    if {_t} is "even":
+        return "&fGerade &8(x2)"
+    if {_t} is "odd":
+        return "&fUngerade &8(x2)"
+    if {_t} is "low":
+        return "&e1-18 &8(x2)"
+    if {_t} is "high":
+        return "&e19-36 &8(x2)"
+    if {_t} is "d1":
+        return "&61. Dutzend 1-12 &8(x3)"
+    if {_t} is "d2":
+        return "&62. Dutzend 13-24 &8(x3)"
+    if {_t} is "d3":
+        return "&63. Dutzend 25-36 &8(x3)"
+    set {_s} to {_t}
+    replace all "n:" with "" in {_s}
+    return "&dZahl &f%{_s}% &8(x36)"
+
+# Auszahlung als Vielfaches des Einsatzes (inkl. Einsatz), 0 = verloren
+function bwRouMult(t: text, n: number) :: number:
+    if {_t} starts with "n:":
+        set {_s} to {_t}
+        replace all "n:" with "" in {_s}
+        if {_n} is ({_s} parsed as number):
+            return 36
+        return 0
+    if {_n} is 0:
+        return 0
+    if {_t} is "red" or "black":
+        if bwRouColor({_n}) is {_t}:
+            return 2
+        return 0
+    if {_t} is "even":
+        if mod({_n}, 2) is 0:
+            return 2
+        return 0
+    if {_t} is "odd":
+        if mod({_n}, 2) is 1:
+            return 2
+        return 0
+    if {_t} is "low":
+        if {_n} <= 18:
+            return 2
+        return 0
+    if {_t} is "high":
+        if {_n} >= 19:
+            return 2
+        return 0
+    if {_t} is "d1":
+        if {_n} <= 12:
+            return 3
+        return 0
+    if {_t} is "d2":
+        if {_n} >= 13:
+            if {_n} <= 24:
+                return 3
+        return 0
+    if {_t} is "d3":
+        if {_n} >= 25:
+            return 3
+        return 0
+    return 0
+
+function bwRouMenu(p: player):
+    set {_u} to "%uuid of {_p}%"
+    set {_inv} to chest inventory with 5 rows named "&4&l✦ &c&lRoulette &4&l✦ &8- &7Wette wählen"
+    loop 45 times:
+        set {_s} to loop-number - 1
+        set slot {_s} of {_inv} to bwGPane("rou", {_s}, 5)
+    set {_x} to red concrete named "&c&lROT"
+    set lore of {_x} to "&7Auszahlung: &ax2" and "&a▶ Klick zum Wählen" and "&8[g=rou:t:red]"
+    set slot 19 of {_inv} to {_x}
+    set {_x} to black concrete named "&8&lSCHWARZ"
+    set lore of {_x} to "&7Auszahlung: &ax2" and "&a▶ Klick zum Wählen" and "&8[g=rou:t:black]"
+    set slot 20 of {_inv} to {_x}
+    set {_x} to white concrete named "&f&lGERADE"
+    set lore of {_x} to "&7Auszahlung: &ax2" and "&a▶ Klick zum Wählen" and "&8[g=rou:t:even]"
+    set slot 21 of {_inv} to {_x}
+    set {_x} to light gray concrete named "&7&lUNGERADE"
+    set lore of {_x} to "&7Auszahlung: &ax2" and "&a▶ Klick zum Wählen" and "&8[g=rou:t:odd]"
+    set slot 22 of {_inv} to {_x}
+    set {_x} to yellow concrete named "&e&l1-18"
+    set lore of {_x} to "&7Auszahlung: &ax2" and "&a▶ Klick zum Wählen" and "&8[g=rou:t:low]"
+    set slot 23 of {_inv} to {_x}
+    set {_x} to orange concrete named "&6&l19-36"
+    set lore of {_x} to "&7Auszahlung: &ax2" and "&a▶ Klick zum Wählen" and "&8[g=rou:t:high]"
+    set slot 24 of {_inv} to {_x}
+    set {_x} to nether star named "&d&l✦ EINZELNE ZAHL ✦"
+    set lore of {_x} to "&7Auszahlung: &d&lx36" and "&7Wähle eine Zahl von 0 bis 36" and "&a▶ Klick zum Wählen" and "&8[g=rou:numpick]"
+    set slot 25 of {_inv} to {_x}
+    set {_x} to blue concrete named "&9&l1. DUTZEND &7(1-12)"
+    set lore of {_x} to "&7Auszahlung: &ax3" and "&a▶ Klick zum Wählen" and "&8[g=rou:t:d1]"
+    set slot 29 of {_inv} to {_x}
+    set {_x} to cyan concrete named "&3&l2. DUTZEND &7(13-24)"
+    set lore of {_x} to "&7Auszahlung: &ax3" and "&a▶ Klick zum Wählen" and "&8[g=rou:t:d2]"
+    set slot 31 of {_inv} to {_x}
+    set {_x} to purple concrete named "&5&l3. DUTZEND &7(25-36)"
+    set lore of {_x} to "&7Auszahlung: &ax3" and "&a▶ Klick zum Wählen" and "&8[g=rou:t:d3]"
+    set slot 33 of {_inv} to {_x}
+    set {_x} to nether star named "&6&lGuthaben: &e%bwPts({_u})% Punkte"
+    set lore of {_x} to "&7Bei der &a0 &7verlieren alle Aussenwetten" and "&7Einsatz: 10 bis &e{@roulette_max}"
+    set slot 4 of {_inv} to {_x}
+    set {_x} to barrier named "&c&lSchließen"
+    set lore of {_x} to "&8[g=hub:close]"
+    set slot 40 of {_inv} to {_x}
+    open {_inv} to {_p}
+
+function bwRouNumMenu(p: player):
+    set {_inv} to chest inventory with 6 rows named "&4&l✦ &c&lRoulette &4&l✦ &8- &7Zahl wählen"
+    loop 54 times:
+        set {_s} to loop-number - 1
+        set slot {_s} of {_inv} to bwGPane("rou", {_s}, 6)
+    loop integers from 0 to 36:
+        set {_n} to loop-value
+        set {_x} to bwRouItem({_n})
+        set lore of {_x} to "&7Setze auf die &f%{_n}%" and "&8[g=rou:n:%{_n}%]"
+        if {_n} is 0:
+            set slot 4 of {_inv} to {_x}
+        else:
+            set {_sl} to 8 + {_n}
+            set slot {_sl} of {_inv} to {_x}
+    set {_x} to arrow named "&7Zurück"
+    set lore of {_x} to "&8[g=rou:menu]"
+    set slot 49 of {_inv} to {_x}
+    open {_inv} to {_p}
+
+function bwRouSpin(p: player, bet: number):
+    set {_u} to "%uuid of {_p}%"
+    set {_type} to {-bwg::rtype::%{_u}%}
+    if {_type} is not set:
+        stop
+    if {_bet} < 10:
+        send action bar "&c✘ Mindesteinsatz: 10 Punkte" to {_p}
+        stop
+    if {_bet} > {@roulette_max}:
+        set {_bet} to {@roulette_max}
+    if bwGTake({_p}, {_bet}) is not true:
+        stop
+    set {-bwg::rlast::%{_u}%} to {_bet}
+    set {_inv} to chest inventory with 5 rows named "&4&l✦ &c&lRoulette &4&l✦ &8- &7Die Kugel rollt ..."
+    loop 45 times:
+        set {_s} to loop-number - 1
+        set slot {_s} of {_inv} to bwGPane("rou", {_s}, 5)
+    set {_x} to gold ingot named "&6&lEinsatz: &e%{_bet}% Punkte"
+    set lore of {_x} to "&7Wette: %bwRouLabel({_type})%"
+    set slot 4 of {_inv} to {_x}
+    set {_x} to arrow named "&e&l▼"
+    set slot 13 of {_inv} to {_x}
+    set {_x} to arrow named "&e&l▲"
+    set slot 31 of {_inv} to {_x}
+    open {_inv} to {_p}
+    play sound "block.note_block.pling" with volume 0.7 and pitch 1.2 to {_p}
+    # Ergebnis steht von Anfang an fest (Position r auf dem Rad); n Schritte rollen bis dorthin
+    set {_r} to a random integer between 1 and 37
+    set {_n} to a random integer between 36 and 52
+    set {_s0} to {_r} - {_n} + 3700
+    wait 8 ticks
+    loop {_n} times:
+        set {_i} to loop-number
+        set {_cur} to {_s0} + {_i}
+        set {_j} to 0
+        while {_j} < 9:
+            add 1 to {_j}
+            set {_k} to bwRouNum({_cur} + {_j} - 5)
+            set {_sl} to 17 + {_j}
+            set slot {_sl} of {_inv} to bwRouItem({_k})
+        if {_p} is online:
+            play sound "block.note_block.hat" with volume 0.6 and pitch 1.5 to {_p}
+        set {_rem} to {_n} - {_i}
+        set {_d} to 2
+        if {_rem} < 12:
+            set {_d} to 2 + floor((12 - {_rem}) / 2)
+        wait ({_d} * 1 tick)
+    set {_res} to bwRouNum({_r})
+    set {_m} to bwRouMult({_type}, {_res})
+    set {_win} to {_bet} * {_m}
+    bwGSettle({_u}, {_bet}, {_win})
+    set {_col} to bwRouColor({_res})
+    set {_cn} to "&aGrün"
+    if {_col} is "red":
+        set {_cn} to "&cRot"
+    if {_col} is "black":
+        set {_cn} to "&8Schwarz"
+    if {_m} > 0:
+        set {_r2} to emerald named "&a&l✔ GEWONNEN! &7(x%{_m}%)"
+        set lore of {_r2} to "&7Zahl: &f%{_res}% %{_cn}%" and "&7Gewinn: &a+%{_win} - {_bet}% Punkte"
+    else:
+        set {_r2} to barrier named "&c&l✘ VERLOREN"
+        set lore of {_r2} to "&7Zahl: &f%{_res}% %{_cn}%" and "&7Du verlierst &c%{_bet}% Punkte&7."
+    set slot 40 of {_inv} to {_r2}
+    set {_x} to nether star named "&6&lGuthaben: &e%bwPts({_u})% Punkte"
+    set slot 4 of {_inv} to {_x}
+    set {_x} to lime dye named "&a▶ Nochmal (&e%{_bet}% Punkte&a)"
+    set lore of {_x} to "&7Gleiche Wette, gleicher Einsatz" and "&8[g=rou:again]"
+    set slot 38 of {_inv} to {_x}
+    set {_x} to arrow named "&7Neue Wette"
+    set lore of {_x} to "&8[g=rou:menu]"
+    set slot 42 of {_inv} to {_x}
+    set {_x} to barrier named "&c&lSchließen"
+    set lore of {_x} to "&8[g=hub:close]"
+    set slot 44 of {_inv} to {_x}
+    bwGBox({_p}, "ROULETTE", {_bet}, {_win}, "Die Kugel fällt auf %{_res}% (%{_cn}%&7). Deine Wette: %bwRouLabel({_type})%")
+    bwGFx({_p}, {_bet}, {_win})
+    if {_m} is 36:
+        broadcast "&6&l%{_p}% &ehat beim Roulette auf die &d&l✦ Zahl %{_res}% ✦ &egewonnen! &7(+%{_win}% Punkte)"
+    set {_good} to false
+    if {_m} > 0:
+        set {_good} to true
+    bwGFlash({_p}, 5, {_good})
+
+# ---------------------------------------------------------
+# BLACKJACK  (gegen den Dealer; Blackjack x2.5, Sieg x2, Unentschieden = Einsatz zurück;
+#             Dealer zieht bis 17; Karte, Halten, Verdoppeln; Fenster schließen = halten)
+# ---------------------------------------------------------
+# Zustand pro Spieler: {-bwj::state::<uuid>} = play | dealer | done; Karten in {-bwj::p::<uuid>::*} und
+# {-bwj::d::<uuid>::*} (Zahl 1-52: Wert = ((Zahl-1) mod 13)+1, Farbe = floor((Zahl-1)/13)).
+function bwBjVal(c: numbers) :: number:
+    set {_t} to 0
+    set {_a} to 0
+    loop {_c::*}:
+        set {_r} to mod(loop-value - 1, 13) + 1
+        if {_r} is 1:
+            add 11 to {_t}
+            add 1 to {_a}
+        else if {_r} >= 10:
+            add 10 to {_t}
+        else:
+            add {_r} to {_t}
+    while {_t} > 21:
+        if {_a} < 1:
+            return {_t}
+        subtract 10 from {_t}
+        subtract 1 from {_a}
+    return {_t}
+
+function bwBjCardName(c: number) :: text:
+    set {_r} to mod({_c} - 1, 13) + 1
+    set {_s} to floor(({_c} - 1) / 13)
+    set {_n} to "%{_r}%"
+    if {_r} is 1:
+        set {_n} to "A"
+    if {_r} is 11:
+        set {_n} to "J"
+    if {_r} is 12:
+        set {_n} to "Q"
+    if {_r} is 13:
+        set {_n} to "K"
+    set {_sy} to "&8♠"
+    if {_s} is 1:
+        set {_sy} to "&c♥"
+    if {_s} is 2:
+        set {_sy} to "&8♣"
+    if {_s} is 3:
+        set {_sy} to "&c♦"
+    return "&f&l%{_n}% %{_sy}%"
+
+function bwBjDeal(u: text, who: text):
+    set {_c} to a random integer between 1 and 52
+    add {_c} to {-bwj::%{_who}%::%{_u}%::*}
+
+# Tisch zeichnen (im laufenden Fenster, ohne es neu zu öffnen)
+# Dealer: Label 9, Karten 10-16 | Einsatz/Ergebnis 22 | Spieler: Label 27, Karten 28-34 | Knöpfe 38/40/42
+function bwBjRender(u: text, reveal: boolean):
+    set {_inv} to {-bwj::inv::%{_u}%}
+    if {_inv} is not set:
+        stop
+    set {_s} to 9
+    while {_s} < 18:
+        set slot {_s} of {_inv} to bwGPane("bj", {_s}, 5)
+        set {_s2} to {_s} + 18
+        set slot {_s2} of {_inv} to bwGPane("bj", {_s2}, 5)
+        add 1 to {_s}
+    set {_dv} to bwBjVal({-bwj::d::%{_u}%::*})
+    set {_pv} to bwBjVal({-bwj::p::%{_u}%::*})
+    if {_reveal} is true:
+        set {_x} to skeleton skull named "&c&lDealer &8- &f&l%{_dv}%"
+    else:
+        set {_first} to {-bwj::d::%{_u}%::1}
+        set {_fv} to bwBjVal({_first})
+        set {_x} to skeleton skull named "&c&lDealer &8- &f&l%{_fv}% &7+ ?"
+    set slot 9 of {_inv} to {_x}
+    set {_i} to 0
+    loop {-bwj::d::%{_u}%::*}:
+        add 1 to {_i}
+        if {_i} <= 7:
+            set {_nm} to bwBjCardName(loop-value)
+            set {_x} to paper named {_nm}
+            if {_i} is 2:
+                if {_reveal} is false:
+                    set {_x} to book named "&7Verdeckte Karte"
+            set {_sl} to 9 + {_i}
+            set slot {_sl} of {_inv} to {_x}
+    set {_x} to golden helmet named "&a&lDu &8- &f&l%{_pv}%"
+    if {_pv} > 21:
+        set {_x} to golden helmet named "&a&lDu &8- &c&l%{_pv}% &c(überkauft)"
+    set slot 27 of {_inv} to {_x}
+    set {_i} to 0
+    loop {-bwj::p::%{_u}%::*}:
+        add 1 to {_i}
+        if {_i} <= 7:
+            set {_nm} to bwBjCardName(loop-value)
+            set {_x} to paper named {_nm}
+            set {_sl} to 27 + {_i}
+            set slot {_sl} of {_inv} to {_x}
+
+function bwBjButtons(u: text, on: boolean):
+    set {_inv} to {-bwj::inv::%{_u}%}
+    if {_inv} is not set:
+        stop
+    set {_s} to 36
+    while {_s} < 45:
+        set slot {_s} of {_inv} to bwGPane("bj", {_s}, 5)
+        add 1 to {_s}
+    if {_on} is true:
+        set {_x} to lime dye named "&a&l▶ Karte ziehen"
+        set lore of {_x} to "&7Noch eine Karte" and "&8[g=bj:hit]"
+        set slot 38 of {_inv} to {_x}
+        set {_x} to red dye named "&c&l■ Halten"
+        set lore of {_x} to "&7Keine Karte mehr, der Dealer ist dran" and "&8[g=bj:stand]"
+        set slot 40 of {_inv} to {_x}
+        if size of {-bwj::p::%{_u}%::*} is 2:
+            set {_x} to gold ingot named "&6&l✦ Verdoppeln"
+            set lore of {_x} to "&7Einsatz verdoppeln, genau eine Karte" and "&8[g=bj:double]"
+            set slot 42 of {_inv} to {_x}
+
+function bwBjFinish(p: player, u: text):
+    set {_pv} to bwBjVal({-bwj::p::%{_u}%::*})
+    set {_dv} to bwBjVal({-bwj::d::%{_u}%::*})
+    set {_pn} to size of {-bwj::p::%{_u}%::*}
+    set {_dn} to size of {-bwj::d::%{_u}%::*}
+    set {_bet} to {-bwj::bet::%{_u}%}
+    set {_pbj} to false
+    if {_pv} is 21:
+        if {_pn} is 2:
+            set {_pbj} to true
+    set {_dbj} to false
+    if {_dv} is 21:
+        if {_dn} is 2:
+            set {_dbj} to true
+    set {_win} to 0
+    set {_txt} to "&c&l✘ VERLOREN"
+    set {_why} to "Der Dealer gewinnt."
+    if {_pv} > 21:
+        set {_why} to "Überkauft mit %{_pv}%."
+    else if {_pbj} is true:
+        if {_dbj} is true:
+            set {_win} to {_bet}
+            set {_txt} to "&e&l± UNENTSCHIEDEN"
+            set {_why} to "Beide haben Blackjack."
+        else:
+            set {_win} to floor({_bet} * 5 / 2)
+            set {_txt} to "&d&l✦ BLACKJACK! &7(x2.5)"
+            set {_why} to "Blackjack zahlt 3:2."
+    else if {_dbj} is true:
+        set {_why} to "Der Dealer hat Blackjack."
+    else if {_dv} > 21:
+        set {_win} to {_bet} * 2
+        set {_txt} to "&a&l✔ GEWONNEN! &7(x2)"
+        set {_why} to "Der Dealer hat sich überkauft (%{_dv}%)."
+    else if {_pv} > {_dv}:
+        set {_win} to {_bet} * 2
+        set {_txt} to "&a&l✔ GEWONNEN! &7(x2)"
+        set {_why} to "%{_pv}% schlägt %{_dv}%."
+    else if {_pv} is {_dv}:
+        set {_win} to {_bet}
+        set {_txt} to "&e&l± UNENTSCHIEDEN"
+        set {_why} to "Beide %{_pv}%, Einsatz zurück."
+    else:
+        set {_why} to "Dealer %{_dv}% schlägt %{_pv}%."
+    bwGSettle({_u}, {_bet}, {_win})
+    bwBjRender({_u}, true)
+    bwBjButtons({_u}, false)
+    set {_inv} to {-bwj::inv::%{_u}%}
+    if {_inv} is set:
+        if {_win} > {_bet}:
+            set {_r} to emerald named {_txt}
+        else if {_win} is {_bet}:
+            set {_r} to gold ingot named {_txt}
+        else:
+            set {_r} to barrier named {_txt}
+        set lore of {_r} to "&7%{_why}%" and "&7Auszahlung: &e%{_win}% &8(Einsatz %{_bet}%)"
+        set slot 22 of {_inv} to {_r}
+        set {_x} to nether star named "&6&lGuthaben: &e%bwPts({_u})% Punkte"
+        set slot 4 of {_inv} to {_x}
+        set {_x} to lime dye named "&a▶ Nochmal (&e%{_bet}% Punkte&a)"
+        set lore of {_x} to "&7Gleicher Einsatz" and "&8[g=bj:again]"
+        set slot 38 of {_inv} to {_x}
+        set {_x} to arrow named "&7Anderer Einsatz"
+        set lore of {_x} to "&8[g=bj:menu]"
+        set slot 40 of {_inv} to {_x}
+        set {_x} to barrier named "&c&lSchließen"
+        set lore of {_x} to "&8[g=hub:close]"
+        set slot 42 of {_inv} to {_x}
+    set {-bwj::state::%{_u}%} to "done"
+    bwGBox({_p}, "BLACKJACK", {_bet}, {_win}, "%{_why}%")
+    bwGFx({_p}, {_bet}, {_win})
+    set {_good} to false
+    if {_win} > {_bet}:
+        set {_good} to true
+    bwGFlash({_p}, 5, {_good})
+
+function bwBjDealer(p: player, u: text):
+    if {-bwj::state::%{_u}%} is not "play":
+        stop
+    set {-bwj::state::%{_u}%} to "dealer"
+    bwBjRender({_u}, true)
+    bwBjButtons({_u}, false)
+    set {_pv} to bwBjVal({-bwj::p::%{_u}%::*})
+    if {_pv} <= 21:
+        while bwBjVal({-bwj::d::%{_u}%::*}) < 17:
+            wait 12 ticks
+            bwBjDeal({_u}, "d")
+            bwBjRender({_u}, true)
+            if {_p} is online:
+                play sound "block.note_block.hat" with volume 0.6 and pitch 1.3 to {_p}
+    wait 8 ticks
+    bwBjFinish({_p}, {_u})
+
+function bwBjHit(p: player):
+    set {_u} to "%uuid of {_p}%"
+    if {-bwj::state::%{_u}%} is not "play":
+        stop
+    bwBjDeal({_u}, "p")
+    bwBjRender({_u}, false)
+    play sound "item.book.page_turn" with volume 1 and pitch 1 to {_p}
+    set {_pv} to bwBjVal({-bwj::p::%{_u}%::*})
+    if {_pv} > 21:
+        set {-bwj::state::%{_u}%} to "dealer"
+        bwBjButtons({_u}, false)
+        wait 8 ticks
+        bwBjFinish({_p}, {_u})
+        stop
+    if {_pv} is 21:
+        bwBjDealer({_p}, {_u})
+        stop
+    if size of {-bwj::p::%{_u}%::*} >= 7:
+        bwBjDealer({_p}, {_u})
+        stop
+    bwBjButtons({_u}, true)
+
+function bwBjDouble(p: player):
+    set {_u} to "%uuid of {_p}%"
+    if {-bwj::state::%{_u}%} is not "play":
+        stop
+    if size of {-bwj::p::%{_u}%::*} is not 2:
+        stop
+    set {_bet} to {-bwj::bet::%{_u}%}
+    if bwPts({_u}) < {_bet}:
+        send action bar "&c✘ Nicht genug Punkte zum Verdoppeln!" to {_p}
+        play sound "entity.villager.no" with volume 1 and pitch 1 to {_p}
+        stop
+    set {bwp::pts::%{_u}%} to bwPts({_u}) - {_bet}
+    set {bwg::pend::%{_u}%} to {_bet} * 2
+    set {-bwj::bet::%{_u}%} to {_bet} * 2
+    bwBjDeal({_u}, "p")
+    bwBjRender({_u}, false)
+    play sound "item.book.page_turn" with volume 1 and pitch 1 to {_p}
+    set {_pv} to bwBjVal({-bwj::p::%{_u}%::*})
+    if {_pv} > 21:
+        set {-bwj::state::%{_u}%} to "dealer"
+        bwBjButtons({_u}, false)
+        wait 8 ticks
+        bwBjFinish({_p}, {_u})
+        stop
+    bwBjDealer({_p}, {_u})
+
+function bwBjStart(p: player, bet: number):
+    if {_bet} < 10:
+        send action bar "&c✘ Mindesteinsatz: 10 Punkte" to {_p}
+        stop
+    if {_bet} > {@bj_max}:
+        set {_bet} to {@bj_max}
+    if bwGTake({_p}, {_bet}) is not true:
+        stop
+    set {_u} to "%uuid of {_p}%"
+    set {-bwj::bet::%{_u}%} to {_bet}
+    set {-bwg::bjlast::%{_u}%} to {_bet}
+    delete {-bwj::p::%{_u}%::*}
+    delete {-bwj::d::%{_u}%::*}
+    bwBjDeal({_u}, "p")
+    bwBjDeal({_u}, "d")
+    bwBjDeal({_u}, "p")
+    bwBjDeal({_u}, "d")
+    set {_inv} to chest inventory with 5 rows named "&2&l✦ &a&lBlackjack &8- &7Du bist dran &2&l✦"
+    loop 45 times:
+        set {_s} to loop-number - 1
+        set slot {_s} of {_inv} to bwGPane("bj", {_s}, 5)
+    set {-bwj::inv::%{_u}%} to {_inv}
+    set {-bwj::state::%{_u}%} to "play"
+    set {_x} to gold ingot named "&6&lEinsatz: &e%{_bet}% Punkte"
+    set slot 22 of {_inv} to {_x}
+    set {_x} to nether star named "&6&lGuthaben: &e%bwPts({_u})% Punkte"
+    set slot 4 of {_inv} to {_x}
+    bwBjRender({_u}, false)
+    bwBjButtons({_u}, true)
+    open {_inv} to {_p}
+    play sound "item.book.page_turn" with volume 1 and pitch 1 to {_p}
+    set {_pv} to bwBjVal({-bwj::p::%{_u}%::*})
+    set {_dv} to bwBjVal({-bwj::d::%{_u}%::*})
+    if {_pv} is 21:
+        wait 14 ticks
+        bwBjDealer({_p}, {_u})
+    else if {_dv} is 21:
+        wait 14 ticks
+        bwBjDealer({_p}, {_u})
+
+# Fenster mitten in der Runde geschlossen (oder Spieler weg) -> automatisch halten
+on inventory close:
+    set {_t} to "%name of event-inventory%"
+    if {_t} does not contain "Du bist dran":
+        stop
+    set {_p} to player
+    set {_u} to "%uuid of {_p}%"
+    if {-bwj::state::%{_u}%} is not "play":
+        stop
+    wait 2 ticks
+    if {-bwj::state::%{_u}%} is not "play":
+        stop
+    if "%name of {_p}'s current inventory%" contains "Du bist dran":
+        stop
+    bwBjDealer({_p}, {_u})
+
+# Nach einem Skript-Reload: hängende Blackjack-Zustände löschen (der Einsatz kommt über {bwg::pend} zurück)
+on load:
+    delete {-bwj::state::*}
+
+# ---------------------------------------------------------
+# SICHERHEIT: AUS CASINO-FENSTERN KANN NICHTS ENTNOMMEN WERDEN
+# ---------------------------------------------------------
+# Alle Casino-Fenster (Hub, Glücksrad, Münzwurf, Automat, Roulette, Blackjack, Bilanz, Tagesbonus)
+# tragen das Zeichen ✦ im Titel. Solange eines offen ist, wird JEDER Klick gesperrt: auch auf
+# Deko-Scheiben, Ergebnis-Items, das eigene Inventar, Shift-Klick und Zahlentasten.
+# Der eigentliche Knopf-Handler weiter unten läuft unabhängig davon und funktioniert weiter.
+on inventory click with priority highest:
+    if "%name of player's current inventory%" contains "✦":
+        cancel event
+
+# ---------------------------------------------------------
+# EIN KLICK-HANDLER FÜR ALLE CASINO-FENSTER
+# ---------------------------------------------------------
+# Lore-Ende "[g=spiel:aktion:wert]". Während ein Spiel läuft, sind nur die Blackjack-Knöpfe aktiv.
+on inventory click:
+    set {_ci} to event-item
+    if {_ci} is not set:
+        stop
+    set {_l} to "%lore of {_ci}%"
+    if {_l} does not contain "[g=":
+        stop
+    cancel event
+    set {_p} to player
+    set {_u} to "%uuid of {_p}%"
+    set {_parts::*} to split {_l} at "[g="
+    set {_rest::*} to split "%{_parts::2}%" at "]"
+    set {_a::*} to split "%{_rest::1}%" at ":"
+    set {_game} to {_a::1}
+    set {_act} to {_a::2}
+    set {_v} to {_a::3}
+    if {_game} is "bj":
+        if {_act} is "hit":
+            bwBjHit({_p})
+            stop
+        if {_act} is "stand":
+            bwBjDealer({_p}, {_u})
+            stop
+        if {_act} is "double":
+            bwBjDouble({_p})
+            stop
+    if {-bwg::spin::%{_u}%} is true:
+        stop
+    wait 1 tick
+    if {_game} is "hub":
+        if {_act} is "open":
+            bwGambleHub({_p})
+        else if {_act} is "wheel":
+            bwGBetMenu({_p}, "wheel")
+        else if {_act} is "coin":
+            bwGBetMenu({_p}, "coin")
+        else if {_act} is "slot":
+            bwGBetMenu({_p}, "slot")
+        else if {_act} is "rou":
+            bwRouMenu({_p})
+        else if {_act} is "bj":
+            bwGBetMenu({_p}, "bj")
+        else if {_act} is "daily":
+            bwGDailyMenu({_p})
+        else if {_act} is "stats":
+            bwGambleStats({_p})
+        else if {_act} is "bank":
+            bwBankMenu({_p})
+        else if {_act} is "stocks":
+            bwStkMenu({_p})
+        else if {_act} is "close":
+            close {_p}'s inventory
+        stop
+    if {_game} is "daily":
+        bwGDailyClaim({_p})
+        bwGDailyMenu({_p})
+        stop
+    if {_game} is "wheel":
+        if {_act} is "menu":
+            bwGBetMenu({_p}, "wheel")
+        else if {_act} is "double":
+            bwGambleDouble({_p})
+        else if {_act} is "again":
+            if {-bwg::last::%{_u}%} is set:
+                bwWheelSpin({_p}, {-bwg::last::%{_u}%})
+        else if {_act} is "all":
+            bwWheelSpin({_p}, bwPts({_u}))
+        else if {_act} is "bet":
+            bwWheelSpin({_p}, ({_v} parsed as number))
+        stop
+    if {_game} is "coin":
+        if {_act} is "side":
+            set {-bwg::cside::%{_u}%} to {_v}
+            bwGBetMenu({_p}, "coin")
+            stop
+        set {_side} to {-bwg::cside::%{_u}%}
+        if {_side} is not set:
+            set {_side} to "H"
+        if {_act} is "again":
+            if {-bwg::clastbet::%{_u}%} is set:
+                bwCoinFlip({_p}, {-bwg::clastbet::%{_u}%}, {_side})
+        else if {_act} is "all":
+            bwCoinFlip({_p}, bwPts({_u}), {_side})
+        else if {_act} is "bet":
+            bwCoinFlip({_p}, ({_v} parsed as number), {_side})
+        stop
+    if {_game} is "slot":
+        if {_act} is "again":
+            if {-bwg::slastbet::%{_u}%} is set:
+                bwSlotSpin({_p}, {-bwg::slastbet::%{_u}%})
+        else if {_act} is "all":
+            bwSlotSpin({_p}, bwPts({_u}))
+        else if {_act} is "bet":
+            bwSlotSpin({_p}, ({_v} parsed as number))
+        stop
+    if {_game} is "rou":
+        if {_act} is "menu":
+            bwRouMenu({_p})
+        else if {_act} is "numpick":
+            bwRouNumMenu({_p})
+        else if {_act} is "t":
+            set {-bwg::rtype::%{_u}%} to {_v}
+            bwGBetMenu({_p}, "rou")
+        else if {_act} is "n":
+            set {-bwg::rtype::%{_u}%} to "n:%{_v}%"
+            bwGBetMenu({_p}, "rou")
+        else if {_act} is "again":
+            if {-bwg::rlast::%{_u}%} is set:
+                bwRouSpin({_p}, {-bwg::rlast::%{_u}%})
+        else if {_act} is "all":
+            bwRouSpin({_p}, min(bwPts({_u}), {@roulette_max}))
+        else if {_act} is "bet":
+            bwRouSpin({_p}, ({_v} parsed as number))
+        stop
+    if {_game} is "bj":
+        if {_act} is "menu":
+            bwGBetMenu({_p}, "bj")
+        else if {_act} is "again":
+            if {-bwg::bjlast::%{_u}%} is set:
+                bwBjStart({_p}, {-bwg::bjlast::%{_u}%})
+        else if {_act} is "all":
+            bwBjStart({_p}, min(bwPts({_u}), {@bj_max}))
+        else if {_act} is "bet":
+            bwBjStart({_p}, ({_v} parsed as number))
+
+
+# ---------------------------------------------------------
+# CASINO NUR PER NPC
+# ---------------------------------------------------------
+# Gemeinsame Öffnen-Funktion für alle Spiel-Befehle
+function bwCasinoOpen(p: player, game: text):
+    if bwIsArena(world of {_p}) is true:
+        send "&cIn Arena-Welten kannst du nicht gamblen. Geh zurück in die Lobby!" to {_p}
+        stop
+    set {_u} to "%uuid of {_p}%"
+    if {-bwg::spin::%{_u}%} is true:
+        send action bar "&c✘ Dein Spiel läuft noch." to {_p}
+        stop
+    if {_game} is "wheel":
+        bwGBetMenu({_p}, "wheel")
+    else if {_game} is "coin":
+        bwGBetMenu({_p}, "coin")
+    else if {_game} is "slot":
+        bwGBetMenu({_p}, "slot")
+    else if {_game} is "rou":
+        bwRouMenu({_p})
+    else if {_game} is "bj":
+        bwGBetMenu({_p}, "bj")
+    else if {_game} is "daily":
+        bwGDailyMenu({_p})
+    else if {_game} is "stats":
+        bwGambleStats({_p})
+    else if {_game} is "bank":
+        bwBankMenu({_p})
+    else if {_game} is "stocks":
+        bwStkMenu({_p})
+
+# Ein Befehl pro Spiel. Der NPC führt ihn als KONSOLE aus:  /npc command add <befehl> <p>
+# (<p> = Name des klickenden Spielers; KEIN -p am NPC!). Die Befehle haben die Permission bedwars.admin:
+# normale Spieler sehen sie nicht (Tab) und können sie nicht tippen, die Konsole darf immer.
+
+command /casinorad [<player>]:
+    description: Das Glücksrad öffnen (nur per NPC oder für Admins)
+    permission: {@admin_perm}
+    permission message: &cDas Glücksrad erreichst du nur über den Glücksrad-NPC.
+    trigger:
+        set {_t} to arg-1
+        if {_t} is not set:
+            set {_t} to player
+        if {_t} is not set:
+            stop
+        bwCasinoOpen({_t}, "wheel")
+
+command /casinomuenzwurf [<player>]:
+    description: Den Münzwurf öffnen (nur per NPC oder für Admins)
+    permission: {@admin_perm}
+    permission message: &cDen Münzwurf erreichst du nur über den Münzwurf-NPC.
+    trigger:
+        set {_t} to arg-1
+        if {_t} is not set:
+            set {_t} to player
+        if {_t} is not set:
+            stop
+        bwCasinoOpen({_t}, "coin")
+
+command /casinoslots [<player>]:
+    description: Den Spielautomaten öffnen (nur per NPC oder für Admins)
+    permission: {@admin_perm}
+    permission message: &cDen Spielautomaten erreichst du nur über den Spielautomaten-NPC.
+    trigger:
+        set {_t} to arg-1
+        if {_t} is not set:
+            set {_t} to player
+        if {_t} is not set:
+            stop
+        bwCasinoOpen({_t}, "slot")
+
+command /casinoroulette [<player>]:
+    description: Roulette öffnen (nur per NPC oder für Admins)
+    permission: {@admin_perm}
+    permission message: &cRoulette erreichst du nur über den Roulette-NPC.
+    trigger:
+        set {_t} to arg-1
+        if {_t} is not set:
+            set {_t} to player
+        if {_t} is not set:
+            stop
+        bwCasinoOpen({_t}, "rou")
+
+command /casinoblackjack [<player>]:
+    description: Blackjack öffnen (nur per NPC oder für Admins)
+    permission: {@admin_perm}
+    permission message: &cBlackjack erreichst du nur über den Blackjack-NPC.
+    trigger:
+        set {_t} to arg-1
+        if {_t} is not set:
+            set {_t} to player
+        if {_t} is not set:
+            stop
+        bwCasinoOpen({_t}, "bj")
+
+command /casinobonus [<player>]:
+    description: Den Tagesbonus öffnen (nur per NPC oder für Admins)
+    permission: {@admin_perm}
+    permission message: &cDen Tagesbonus erreichst du nur über den Tagesbonus-NPC.
+    trigger:
+        set {_t} to arg-1
+        if {_t} is not set:
+            set {_t} to player
+        if {_t} is not set:
+            stop
+        bwCasinoOpen({_t}, "daily")
+
+command /casinostats [<player>]:
+    description: Die Bilanz öffnen (nur per NPC oder für Admins)
+    permission: {@admin_perm}
+    permission message: &cDie Bilanz erreichst du nur über den Tagesbonus-NPC.
+    trigger:
+        set {_t} to arg-1
+        if {_t} is not set:
+            set {_t} to player
+        if {_t} is not set:
+            stop
+        bwCasinoOpen({_t}, "stats")
+
+command /casinobank [<player>]:
+    description: Die Bank öffnen (nur per NPC oder für Admins)
+    permission: {@admin_perm}
+    permission message: &cDie Bank erreichst du nur über den Bank-NPC.
+    trigger:
+        set {_t} to arg-1
+        if {_t} is not set:
+            set {_t} to player
+        if {_t} is not set:
+            stop
+        bwCasinoOpen({_t}, "bank")
+
+command /casinoboerse [<player>]:
+    description: Die Börse öffnen (nur per NPC oder für Admins)
+    permission: {@admin_perm}
+    permission message: &cDie Börse erreichst du nur über den Börsen-NPC.
+    trigger:
+        set {_t} to arg-1
+        if {_t} is not set:
+            set {_t} to player
+        if {_t} is not set:
+            stop
+        bwCasinoOpen({_t}, "stocks")
+
+# ---------------------------------------------------------
+# /gamble (Casino-Hub) - nur noch für Admins
+# ---------------------------------------------------------
+command /gamble [<text>]:
+    aliases: gluecksrad, wheel, casino
+    usage: /gamble [rad|muenzwurf|slots|roulette|blackjack|bonus|stats|bank|boerse]
+    permission: {@admin_perm}
+    permission message: &cDas Casino erreichst du nur über die Casino-NPCs.
+    trigger:
+        if sender is not a player:
+            send "&cNur für Spieler!" to sender
+            stop
+        if player does not have permission "{@admin_perm}":
+            send "&cDas Casino erreichst du nur über die Casino-NPCs." to player
+            stop
+        if bwIsArena(world of player) is true:
+            send "&cIn Arena-Welten kannst du nicht gamblen. Geh zurück in die Lobby!" to player
+            stop
+        if arg-1 is not set:
+            bwGambleHub(player)
+            stop
+        if arg-1 is "rad" or "wheel" or "gluecksrad":
+            bwGBetMenu(player, "wheel")
+        else if arg-1 is "muenzwurf" or "coin" or "coinflip" or "münzwurf":
+            bwGBetMenu(player, "coin")
+        else if arg-1 is "slots" or "slot" or "automat":
+            bwGBetMenu(player, "slot")
+        else if arg-1 is "roulette":
+            bwRouMenu(player)
+        else if arg-1 is "blackjack" or "bj" or "21":
+            bwGBetMenu(player, "bj")
+        else if arg-1 is "bonus" or "daily" or "tagesbonus":
+            bwGDailyMenu(player)
+        else if arg-1 is "stats" or "statistik":
+            bwGambleStats(player)
+        else if arg-1 is "bank":
+            bwBankMenu(player)
+        else if arg-1 is "boerse" or "börse" or "aktien" or "stocks":
+            bwStkMenu(player)
+        else:
+            bwGambleHub(player)
+
+# ---------------------------------------------------------
+# Getippte Befehle /bank (und optional /aktien) für normale Spieler sperren.
+# Die Bank-NPCs nutzen /casinobank, sind also nicht betroffen.
+# Wenn /bank auch getippt erlaubt bleiben soll: diesen Block einfach löschen.
+# ---------------------------------------------------------
+on command:
+    if player is not set:
+        stop
+    set {_c} to lowercase the command
+    if player has permission "{@admin_perm}":
+        stop
+    if {_c} is "bank":
+        cancel the event
+        send "&cDie Bank erreichst du nur über den Bank-NPC." to player
+    # Börse ebenfalls nur per NPC? Dann die drei Zeilen aktivieren (# entfernen):
+    # else if {_c} is "aktien":
+    #     cancel the event
+    #     send "&cDie Börse erreichst du nur über den Börsen-NPC." to player
