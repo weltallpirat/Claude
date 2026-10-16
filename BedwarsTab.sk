@@ -112,10 +112,12 @@ function bwTcCandidates(me: text, c: text, pos: number, a1: text, a2: text) :: t
     else if {_c} is "musik" or "music":
         # /musik play <Distanz> <Datei>: Dateien kommen aus dem Ordner plugins/Musik (siehe BedwarsMusik.sk)
         if {_pos} is 1:
-            add "play" and "stop" and "list" and "reload" to {_r::*}
+            add "play" and "stop" and "list" and "reload" and "lautstaerke" to {_r::*}
         else if {_pos} is 2:
             if {_a1} is "play":
                 add "16" and "30" and "50" and "75" and "100" to {_r::*}
+            else if {_a1} is "lautstaerke":
+                add "25" and "50" and "75" and "100" to {_r::*}
         else if {_pos} is 3:
             if {_a1} is "play":
                 loop {-bwx::music::files::*}:
