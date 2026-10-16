@@ -1,0 +1,39 @@
+# =========================================================
+# JUMP-PAD / BOOSTER SKRIPT (GOLDENE DRUCKPLATTE)
+# =========================================================
+
+options:
+    # Trage hier den Namen deiner Welt ein (z. B. "world" oder "Lobby")
+    world_name: "lobby"
+    
+    # Werte für min. 10 Blöcke Höhe & min. 20 Blöcke Weite
+    forward_power: 3.5
+    upward_power: 1.6
+
+# Reagiert sofort beim Betreten/Darüberlaufen der Druckplatte (ohne Hüpfen)
+on player move:
+    if player's world is {@world_name}:
+        # Prüft, ob der Block unter den Füßen oder auf Fußhöhe eine goldene Druckplatte ist
+        if block at location of player is light weighted pressure plate:
+            
+            # Cooldown-Sperre (verhindert Mehrfach-Auslösung auf demselben Block)
+            if {jumppad::cooldown::%player%} is not set:
+                set {jumppad::cooldown::%player%} to true
+                
+                # Effekt & Sound abspielen
+                play sound "entity.wind_charge.throw" with volume 1 and pitch 1.2 at location of player
+                play 25 cloud particles at location of player
+                
+                # Katapultiert den Spieler nach vorne und stark nach oben
+                push player in direction of player at speed {@forward_power}
+                push player upwards at speed {@upward_power}
+                
+                # Cooldown nach 1.5 Sekunden zurücksetzen
+                wait 1.5 seconds
+                delete {jumppad::cooldown::%player%}
+
+# Verhindert den Fallschaden nach dem Flug komplett
+on damage of player:
+    if damage cause is fall:
+        if victim's world is {@world_name}:
+            cancel event

@@ -1,0 +1,157 @@
+data:
+  # ---------------------------------------------------------
+  # Reihe 1: Team-Upgrades (jedes beginnt bei Stufe 0 -> kaufbar ab Stufe 1)
+  # Stufen und Preise kommen aus der sbaconfig.yml (upgrades.prices / upgrades.limit)
+  # ---------------------------------------------------------
+  - stack: "IRON_SWORD;1;§aTeam Schärfe {level};§7Erhöht den Nahkampfschaden des gesamten Teams!"
+    column: 1
+    row: 1
+    price: 4 of diamond
+    properties: sharpness
+
+  - stack: "IRON_CHESTPLATE;1;§aTeam Schutz {level};§7Verringert den erlittenen Schaden des gesamten Teams!"
+    column: 2
+    row: 1
+    price: 4 of diamond
+    properties: protection
+
+  - stack: "GOLDEN_PICKAXE;1;§aTeam Effizienz {level};§7Baut Blöcke schneller ab!"
+    column: 3
+    row: 1
+    price: 4 of diamond
+    properties: efficiency
+
+  - stack: "LEATHER_BOOTS;1;§aTeam Federfall {level};§7Verringert Sturzschaden für das gesamte Team!"
+    column: 4
+    row: 1
+    price: 4 of diamond
+    properties: feather_falling
+
+  # Heal Pool: Regeneration für das Team in der Base (Radius = upgrades.trap-detection-range)
+  - stack: "BEACON;1;§aHeal Pool;§7Gibt allen Teammitgliedern in der Base Regeneration!"
+    column: 6
+    row: 1
+    price: 4 of diamond
+    properties: healpool
+
+  # ---------------------------------------------------------
+  # Fallen (Untermenü)
+  # ---------------------------------------------------------
+  - stack: "LEATHER;1;§cTeam Fallen;§7Klicke, um Fallen für eure Base zu kaufen!"
+    column: 7
+    row: 1
+    items:
+      - price: 2 of diamond
+        skip: 1
+        properties: minertrap
+        stack:
+          type: WOODEN_PICKAXE
+          display-name: "§bAbbaulähmung-Falle"
+          lore:
+            - "§7Löst aus, wenn ein Gegner in 10 Blöcken Radius um eure Base kommt."
+            - "§7Gibt dem Gegner Abbaulähmung!"
+
+      - price: 2 of diamond
+        skip: 1
+        properties: blindtrap
+        stack:
+          type: INK_SAC
+          display-name: "§bBlindheits-Falle"
+          lore:
+            - "§7Löst aus, wenn ein Gegner in 10 Blöcken Radius um eure Base kommt."
+            - "§7Blendet den Gegner!"
+
+      - price: 2 of diamond
+        skip: 1
+        properties:
+          name: trap
+          identifier: reveal_trap
+          target: enemy
+          effects:
+            - type: glowing
+              duration: 200
+              level: 0
+        stack:
+          type: ENDER_EYE
+          display-name: "§bEnthüllungs-Falle"
+          lore:
+            - "§7Löst aus, wenn ein Gegner in 10 Blöcken Radius um eure Base kommt."
+            - "§7Löst Unsichtbarkeit auf und lässt den Gegner 10 Sekunden leuchten!"
+
+  # ---------------------------------------------------------
+  # Reihe 3: Forge (Schmiede) - nur der Reihe nach kaufbar (Bedwars.sk, Abschnitt 8 und 15)
+  # Die Wirkung kommt komplett aus dem Skript, SBA kauft hier nur das Item:
+  # I: +50% | II: +100% | III: Smaragd-Spawner (alle 60 Sekunden) | IV: +200%
+  # Prozente gehen immer von der Grundmenge OHNE Schmiede aus (nicht aufeinander).
+  # Das Skript entfernt das gekaufte Furnace-Item wieder aus dem Inventar.
+  # ---------------------------------------------------------
+  - price: 4 of diamond
+    column: 1
+    row: 3
+    stack:
+      type: FURNACE
+      amount: 1
+      display-name: "§aSchmiede I §7(+50% Ressourcen)"
+      lore:
+        - "§7Iron- und Gold-Spawner +50%!"
+
+  - price: 8 of diamond
+    column: 2
+    row: 3
+    stack:
+      type: FURNACE
+      amount: 1
+      display-name: "§aSchmiede II §7(+100% Ressourcen)"
+      lore:
+        - "§7Iron- und Gold-Spawner +100%!"
+
+  - price: 12 of diamond
+    column: 3
+    row: 3
+    stack:
+      type: FURNACE
+      amount: 1
+      display-name: "§aSchmiede III §7(Smaragd-Spawn)"
+      lore:
+        - "§7Schaltet den Smaragd-Spawner in eurer Base frei (alle 60 Sekunden)!"
+
+  - price: 16 of diamond
+    column: 4
+    row: 3
+    stack:
+      type: FURNACE
+      amount: 1
+      display-name: "§aSchmiede IV §7(+200% Ressourcen)"
+      lore:
+        - "§7Iron- und Gold-Spawner +200%!"
+
+  # ---------------------------------------------------------
+  # TRENNLINIE
+  # ---------------------------------------------------------
+  - stack: "GRAY_STAINED_GLASS_PANE;1; "
+    row: 2
+    column: 0
+  - stack: "GRAY_STAINED_GLASS_PANE;1; "
+    row: 2
+    column: 1
+  - stack: "GRAY_STAINED_GLASS_PANE;1; "
+    row: 2
+    column: 2
+  - stack: "GRAY_STAINED_GLASS_PANE;1; "
+    row: 2
+    column: 3
+  - stack: "GRAY_STAINED_GLASS_PANE;1; "
+    row: 2
+    column: 4
+  - stack: "GRAY_STAINED_GLASS_PANE;1; "
+    row: 2
+    column: 5
+  - stack: "GRAY_STAINED_GLASS_PANE;1; "
+    row: 2
+    column: 6
+  - stack: "GRAY_STAINED_GLASS_PANE;1; "
+    row: 2
+    column: 7
+  - stack: "GRAY_STAINED_GLASS_PANE;1; "
+    row: 2
+    column: 8

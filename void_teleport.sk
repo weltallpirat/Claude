@@ -1,0 +1,30 @@
+# =========================================================
+# VOID TELEPORT SKRIPT (LOBBY RETTUNG)
+# =========================================================
+
+options:
+    # Trage hier den Namen deiner Lobby-Welt ein (z. B. "world" oder "Lobby")
+    lobby_world: "lobby"
+    
+    # Ab welcher Höhe der Spieler gerettet wird (Standard: 0)
+    void_height: 0
+
+# Reagiert sofort, wenn ein Spieler in der Lobby-Welt zu tief fällt
+on player move:
+    if player's world is {@lobby_world}:
+        if y-coordinate of player is less than or equal to {@void_height}:
+            if {lobbyspawn} is set:
+                teleport player to {lobbyspawn}
+                send "§cDu bist in den Void gefallen und wurdest gerettet!" to player
+                play sound "entity.enderman.teleport" with volume 1 and pitch 1 to player
+                play 25 portal particles at location of player
+            else:
+                send "§cDer Lobby-Spawn wurde noch nicht mit /setlobbyspawn gesetzt!" to player
+
+# Verhindert Schaden durch den Void komplett
+on damage of player:
+    if damage cause is void:
+        if victim's world is {@lobby_world}:
+            cancel event
+            if {lobbyspawn} is set:
+                teleport victim to {lobbyspawn}

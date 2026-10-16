@@ -1,0 +1,47 @@
+# =========================================================
+# BEDWARS MUSIK-DAUERSCHLEIFE (automatisch von PACK-BAUEN.bat erzeugt)
+# Spielt den Song fuer alle Spieler in Dauerschleife. Nach Server-Neustart
+# startet er automatisch wieder von vorne. Neue Spieler hoeren ihn ~10 Sek. nach dem Join.
+# Befehl (nur OP / Konsole): /musikloop an | aus
+# Braucht das Resource Pack (musik-pack.zip) bei den Spielern.
+# =========================================================
+
+options:
+    song: casino
+    laenge: 2472
+    lautstaerke: 16
+
+on load:
+    set {-ml::an} to true
+    loop all players:
+        set {-ml::t::%loop-player%} to {@laenge} - 3
+
+on join:
+    set {-ml::t::%player%} to {@laenge} - 10
+
+every 1 second:
+    if {-ml::an} is true:
+        loop all players:
+            add 1 to {-ml::t::%loop-player%}
+            if {-ml::t::%loop-player%} >= {@laenge}:
+                set {-ml::t::%loop-player%} to 0
+                play sound "musik:{@song}" with volume {@lautstaerke} and pitch 1 at location of loop-player to loop-player
+
+command /musikloop [<text>]:
+    usage: /musikloop <an|aus>
+    trigger:
+        if sender is a player:
+            if sender is not op:
+                send "&cKeine Berechtigung." to sender
+                stop
+        if arg-1 is "aus":
+            set {-ml::an} to false
+            stop sound "musik:{@song}" for all players
+            send "&6[Musik] &7Dauerschleife aus." to sender
+        else if arg-1 is "an":
+            set {-ml::an} to true
+            loop all players:
+                set {-ml::t::%loop-player%} to {@laenge}
+            send "&6[Musik] &7Dauerschleife an." to sender
+        else:
+            send "&7Nutzung: &e/musikloop <an|aus>" to sender

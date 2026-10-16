@@ -1,0 +1,62 @@
+# =========================================================
+# LOBBY SCHUTZ & SPAWN SKRIPT
+# =========================================================
+
+options:
+    # Trage hier exakt den Namen deiner Lobby-Welt ein:
+    lobby_world: "lobby"
+
+# --- 1. COMMAND: SPAWN SETZEN ---
+command /setlobbyspawn:
+    permission: op
+    trigger:
+        set {lobbyspawn} to location of player
+        send "§aHaupt-Lobby-Spawn wurde an deiner Position gesetzt!" to player
+
+# --- 2. TELEPORT BEIM BEITRETEN ---
+on first join:
+    if {lobbyspawn} is set:
+        teleport player to {lobbyspawn}
+
+on join:
+    if {lobbyspawn} is set:
+        teleport player to {lobbyspawn}
+
+# --- 3. BAUSCHUTZ (ERLAUBT ABBAUEN IM KREATIVMODUS FÜR OPS) ---
+on block break:
+    if player's world is {@lobby_world}:
+        if player is not op:
+            cancel event
+        else if player's gamemode is not creative:
+            cancel event
+
+on block place:
+    if player's world is {@lobby_world}:
+        if player is not op:
+            cancel event
+        else if player's gamemode is not creative:
+            cancel event
+
+# --- 4. SCHADEN, PVP & HUNGER DEAKTIVIEREN ---
+on damage:
+    if victim's world is {@lobby_world}:
+        cancel event
+
+on hunger bar change:
+    if player's world is {@lobby_world}:
+        cancel event
+        set player's food level to 10
+
+# --- 5. MOBS UND TIERE BLOCKIEREN ---
+on spawn:
+    if entity's world is {@lobby_world}:
+        if entity is not a player:
+            cancel event
+
+# --- 6. ZEIT FIXIEREN (DAUERHAFT TAG) ---
+on weather change:
+    if event-world is {@lobby_world}:
+        cancel event
+
+every 10 seconds:
+    set time of world {@lobby_world} to 06:00

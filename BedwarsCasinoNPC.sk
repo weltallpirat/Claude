@@ -1,0 +1,149 @@
+# =========================================================
+# BedwarsCasinoNPC.sk - Casino nur noch ueber Citizens-NPCs
+# =========================================================
+# Einfach neben BedwarsGamble.sk in plugins/Skript/scripts/ legen, danach /sk reload scripts
+# Es muss NICHTS in den anderen Dateien geaendert werden.
+#
+# - Jedes Spiel hat einen eigenen Befehl, der direkt das GUI des Spiels oeffnet
+# - Getippt sind die Befehle fuer normale Spieler gesperrt (on command weiter unten),
+#   der NPC fuehrt sie als Spieler aus (Citizens -p) und umgeht diese Sperre
+# - Die Befehle selbst haben KEINE Skript-Permission mehr (kein Vault noetig)
+# - /gamble (und Aliasse), /bank sowie das Hub-Fenster sind nur noch per NPC bzw. fuer Admins
+# - Tagesbonus und Bilanz teilen sich einen NPC (/casinobonus, Button zur Bilanz)
+#
+# Voraussetzung: BedwarsGamble.sk (Funktionen bwGBetMenu, bwRouMenu, bwGDailyMenu, bwGambleStats)
+
+options:
+    admin_perm: bedwars.admin
+
+# Beim Laden erscheint in der Konsole diese Zeile - so siehst du, dass die NEUE Version aktiv ist
+on load:
+    send "[BedwarsCasinoNPC] Version 3 geladen (keine Befehls-Permissions, Sperre per on command)" to console
+
+# ---------------------------------------------------------
+# Gemeinsame Oeffnen-Funktion
+# ---------------------------------------------------------
+function bwCasinoOpen(p: player, game: text):
+    set {_u} to "%uuid of {_p}%"
+    if {-bwg::spin::%{_u}%} is true:
+        send action bar "&c✘ Dein Spiel läuft noch." to {_p}
+        stop
+    if {_game} is "wheel":
+        bwGBetMenu({_p}, "wheel")
+    else if {_game} is "coin":
+        bwGBetMenu({_p}, "coin")
+    else if {_game} is "slot":
+        bwGBetMenu({_p}, "slot")
+    else if {_game} is "bj":
+        bwGBetMenu({_p}, "bj")
+    else if {_game} is "rou":
+        bwRouMenu({_p})
+    else if {_game} is "daily":
+        # Tagesbonus + Bilanz sind EIN NPC: im Tagesbonus-Fenster liegt ein Bilanz-Button
+        bwGDailyMenu({_p})
+        if "%name of {_p}'s current inventory%" contains "Tagesbonus":
+            set {_x} to writable book named "&9&lBilanz"
+            set lore of {_x} to "&7Deine Gamble-Statistik" and " " and "&a▶ Klick zum Öffnen" and "&8[g=hub:stats]"
+            set slot 24 of {_p}'s current inventory to {_x}
+    else if {_game} is "stats":
+        # und im Bilanz-Fenster ein Button zurück zum Tagesbonus
+        bwGambleStats({_p})
+        if "%name of {_p}'s current inventory%" contains "Gamble-Bilanz":
+            set {_x} to clock named "&2&lTagesbonus"
+            set lore of {_x} to "&7Gratis-Punkte abholen" and " " and "&a▶ Klick zum Öffnen" and "&8[g=hub:daily]"
+            set slot 22 of {_p}'s current inventory to {_x}
+
+# ---------------------------------------------------------
+# Ein Befehl pro Spiel
+# ---------------------------------------------------------
+command /casinorad:
+    executable by: players
+    trigger:
+        bwCasinoOpen(player, "wheel")
+
+command /casinomuenzwurf:
+    executable by: players
+    trigger:
+        bwCasinoOpen(player, "coin")
+
+command /casinoslots:
+    executable by: players
+    trigger:
+        bwCasinoOpen(player, "slot")
+
+command /casinoroulette:
+    executable by: players
+    trigger:
+        bwCasinoOpen(player, "rou")
+
+command /casinoblackjack:
+    executable by: players
+    trigger:
+        bwCasinoOpen(player, "bj")
+
+command /casinobonus:
+    executable by: players
+    trigger:
+        bwCasinoOpen(player, "daily")
+
+command /casinostats:
+    executable by: players
+    trigger:
+        bwCasinoOpen(player, "stats")
+
+# ---------------------------------------------------------
+# Alten /gamble sperren (nur Admins/Ops)
+# Weitere Aliasse einfach in die Zeile mit "is" eintragen
+# ---------------------------------------------------------
+on command:
+    if player is not set:
+        stop
+    if player has permission "{@admin_perm}":
+        stop
+    set {_c} to lowercase "%command%"
+    set {_need} to ""
+    if {_c} is "gamble" or "casino" or "roulette" or "blackjack" or "bj" or "slots" or "slot" or "muenzwurf" or "coinflip" or "rad" or "gluecksrad":
+        set {_need} to "{@admin_perm}"
+    else if {_c} starts with "casino":
+        set {_k} to {_c}
+        replace all "casino" with "" in {_k}
+        set {_need} to "bedwars.casino.%{_k}%"
+    else if {_c} is "bank":
+        set {_need} to "bedwars.casino.bank"
+    # Boerse (Aktien) ebenfalls nur per NPC? Dann die zwei Zeilen unten aktivieren (# entfernen)
+    # else if {_c} is "aktien" or "boerse" or "aktie":
+    #     set {_need} to "bedwars.casino.aktien"
+    if {_need} is not "":
+        if player does not have permission {_need}:
+            cancel the event
+            send "&cDas erreichst du nur über die NPCs in der Lobby." to player
+
+# ---------------------------------------------------------
+# Hub-Fenster (mit Spiel-Auswahl) nur fuer Admins.
+# Der Button "Zurueck zum Casino" schliesst fuer Spieler dadurch einfach das Fenster.
+# ---------------------------------------------------------
+# Klick auf "Zurück zum Casino" merken (gilt auch für OPs/Admins) ...
+on inventory click:
+    if "%lore of event-item%" contains "[g=hub:open]":
+        set {_u} to "%uuid of player%"
+        set {-bwcas::nohub::%{_u}%} to true
+        wait 20 ticks
+        delete {-bwcas::nohub::%{_u}%}
+
+# ... und den Hub dann für ALLE verhindern. Zusätzlich ist der Hub für Nicht-Admins immer gesperrt.
+# Nur ein Admin, der /gamble selbst eintippt, kommt noch in den Hub.
+on inventory open:
+    if "%name of event-inventory%" contains "Gamble-Hub":
+        set {_u} to "%uuid of player%"
+        set {_block} to false
+        if {-bwcas::nohub::%{_u}%} is true:
+            set {_block} to true
+        else if player does not have permission "{@admin_perm}":
+            set {_block} to true
+        if {_block} is true:
+            cancel the event
+            set {_p} to player
+            wait 1 tick
+            if {_p} is online:
+                if "%name of {_p}'s current inventory%" contains "✦":
+                    close {_p}'s inventory

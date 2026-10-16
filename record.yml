@@ -1,0 +1,11 @@
+record:
+  BedwarsRooftop:
+    time: 4
+    team: §2Grün
+    winners:
+    - Weltalpirat
+  BedwarsPlayground:
+    time: 1
+    team: §1Blau
+    winners:
+    - Weltalpirat

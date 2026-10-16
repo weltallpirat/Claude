@@ -1,0 +1,117 @@
+# =========================================================
+# BEDWARS MUSIK (fuenfte Datei, braucht skript-reflect, KEIN SkBee)
+# =========================================================
+# Eigene Musik (.ogg) per Befehl an deiner Position abspielen:
+#     /musik play <Distanz> <Datei>     Distanz = Hoerweite in Bloecken (z.B. 30)
+#     /musik stop                       Musik fuer alle Spieler beenden
+#     /musik list                       Dateien im Ordner anzeigen
+#     /musik reload                     Ordner neu einlesen (passiert auch jede Minute)
+# Nur fuer OPs. Im /chelp-Menue (Admin, oberste Reihe) und per Tab-Taste (BedwarsTab.sk) bedienbar.
+#
+# WICHTIG - SO FUNKTIONIERT MUSIK IN MINECRAFT:
+#   Der Server kann keine .ogg-Datei an Spieler schicken. Minecraft spielt nur Sounds ab, die im
+#   RESOURCE PACK der Spieler stecken. Deshalb:
+#   1. .ogg-Dateien in den Ordner  plugins/Musik  legen (wird automatisch angelegt).
+#      Dateinamen: NUR kleine Buchstaben, Zahlen, _ und -   (z.B. lobby_theme.ogg).
+#      Keine Grossbuchstaben, Leerzeichen oder Umlaute, sonst wird die Datei ignoriert.
+#   2. musik_pack_bauen.py ausfuehren: baut aus dem Ordner das Resource Pack musik-pack.zip
+#   3. Das Pack hochladen und in der server.properties eintragen (resource-pack, resource-pack-sha1).
+#   Wer das Pack nicht geladen hat, hoert nichts. Die Sound-Namen im Pack sind  musik:<dateiname>.
+#
+# HOERWEITE: Minecraft hoert Sounds im Radius Lautstaerke x 16 Bloecke. Das Skript rechnet Distanz / 16.
+#   Unter 16 Bloecken wird die Musik nur leiser, die Hoerweite bleibt 16.
+#   Mono-Dateien werden mit der Entfernung leiser, Stereo-Dateien klingen im ganzen Radius gleich laut.
+# =========================================================
+
+import:
+    java.io.File
+
+options:
+    music_dir: plugins/Musik
+    music_max_dist: 200
+
+# Ordner einlesen -> {-bwx::music::files::*} (Namen ohne .ogg). Legt den Ordner an, falls er fehlt.
+function bwMusicScan():
+    delete {-bwx::music::files::*}
+    set {_dir} to new File("{@music_dir}")
+    {_dir}.mkdirs()
+    set {_names::*} to ...{_dir}.list()
+    loop sorted {_names::*}:
+        set {_f} to "%loop-value%"
+        if {_f} ends with ".ogg":
+            set {_b} to subtext of {_f} from characters 1 to (length of {_f} - 4)
+            if {_b} matches "[a-z0-9_-]+":
+                add {_b} to {-bwx::music::files::*}
+            else if {-bwx::music::warned::%{_f}%} is not set:
+                set {-bwx::music::warned::%{_f}%} to true
+                send "&c[Musik] Ungültiger Dateiname (erlaubt: a-z, 0-9, _ und -): %{_f}%" to console
+
+on load:
+    bwMusicScan()
+
+every 60 seconds:
+    bwMusicScan()
+
+command /musik [<text>] [<text>] [<text>]:
+    aliases: music
+    usage: /musik play <Distanz> <Datei> | stop | list | reload
+    trigger:
+        if sender is not a player:
+            send "&cNur für Spieler (die Musik spielt an deiner Position)!" to sender
+            stop
+        if player is not op:
+            send "&cKeine Berechtigung." to player
+            stop
+        if arg-1 is "reload":
+            bwMusicScan()
+            send "&6[Musik] &7Ordner neu eingelesen: &e%size of {-bwx::music::files::*}% &7Datei(en)." to player
+            stop
+        if arg-1 is "list" or "liste":
+            bwMusicScan()
+            if size of {-bwx::music::files::*} is 0:
+                send "&6[Musik] &7Keine .ogg-Dateien in &f{@music_dir} &7gefunden. Dateinamen: nur a-z, 0-9, _ und -" to player
+                stop
+            send "&6[Musik] &7Dateien (&e%size of {-bwx::music::files::*}%&7):" to player
+            loop {-bwx::music::files::*}:
+                send "&8- &f%loop-value%" to player
+            send "&7Abspielen: &e/musik play <Distanz> <Datei>" to player
+            stop
+        if arg-1 is "stop":
+            loop {-bwx::music::played::*}:
+                stop sound "musik:%loop-index%" for all players
+            loop {-bwx::music::files::*}:
+                stop sound "musik:%loop-value%" for all players
+            send "&6[Musik] &7Musik für alle Spieler beendet." to player
+            stop
+        if arg-1 is "play" or "abspielen":
+            if arg-2 is not set:
+                send "&cNutzung: /musik play <Distanz> <Datei>" to player
+                stop
+            if arg-3 is not set:
+                send "&cNutzung: /musik play <Distanz> <Datei> &7(Dateien: /musik list)" to player
+                stop
+            set {_dist} to arg-2 parsed as number
+            if {_dist} is not set:
+                send "&cDie Distanz muss eine Zahl sein (Blöcke), z.B. &e30&c." to player
+                stop
+            if {_dist} < 1:
+                set {_dist} to 1
+            if {_dist} > {@music_max_dist}:
+                set {_dist} to {@music_max_dist}
+            set {_n} to arg-3 in lowercase
+            if {_n} ends with ".ogg":
+                set {_n} to subtext of {_n} from characters 1 to (length of {_n} - 4)
+            bwMusicScan()
+            if {-bwx::music::files::*} does not contain {_n}:
+                send "&cDatei &f%{_n}% &cnicht gefunden. Vorhandene Dateien: &e/musik list" to player
+                stop
+            set {_vol} to {_dist} / 16
+            set {_loc} to location of player
+            play sound "musik:%{_n}%" with volume {_vol} and pitch 1 at {_loc}
+            set {-bwx::music::played::%{_n}%} to true
+            send "&6[Musik] &7Spiele &f%{_n}% &7an deiner Position, Hörweite ca. &e%{_dist}% &7Blöcke." to player
+            if {_dist} < 16:
+                send "&8Unter 16 Blöcken wird die Musik nur leiser, die Hörweite bleibt bei 16 Blöcken." to player
+            send "&8Hörst du nichts? Dann fehlt dir das Resource Pack mit der Datei (siehe Kopf von BedwarsMusik.sk)." to player
+            stop
+        send "&6[Musik] &7Nutzung: &e/musik play <Distanz> <Datei> &8| &e/musik stop &8| &e/musik list &8| &e/musik reload" to player

@@ -1,0 +1,34 @@
+# =========================================================
+# LOBBY TELEPORT SKRIPT (EISEN-DRUCKPLATTE + HOLOGRAMM)
+# =========================================================
+
+options:
+    # Trage hier den Namen deiner Lobby-Welt ein (z. B. "world" oder "Lobby")
+    lobby_world: "lobby"
+
+# --- 1. TELEPORT MECHANIK ---
+on player move:
+    if player's world is {@lobby_world}:
+        if block at location of player is heavy weighted pressure plate:
+            if {lobbyspawn} is set:
+                teleport player to {lobbyspawn}
+                send "§aDu wurdest zum Lobby-Spawn zurückteleportiert!" to player
+                play sound "entity.enderman.teleport" with volume 1 and pitch 1 to player
+                play 25 portal particles at location of player
+            else:
+                send "§cDer Lobby-Spawn wurde noch nicht mit /setlobbyspawn gesetzt!" to player
+
+# --- 2. BEFEHL UM HOLOGRAMM PLATZIEREN ---
+command /spawnholo:
+    permission: op
+    trigger:
+        # Führt den nativen Minecraft-Summon-Befehl aus für ein perfektes Hologramm
+        execute console command "execute at %player% run summon armor_stand ~ ~1.2 ~ {Invisible:1b,Invulnerable:1b,NoGravity:1b,CustomNameVisible:1b,CustomName:'""§a§lzum Spawn §7(Treten zum Teleportieren)""',Tags:[""spawn_holo""]}"
+        send "§aHologramm für den Spawn wurde genau an deiner Position platziert!" to player
+
+# --- 3. BEFEHL UM NAHE GELEGENE HOLOGRAMME ZU ENTFERNEN ---
+command /removeholo:
+    permission: op
+    trigger:
+        execute console command "execute at %player% run kill @e[type=armor_stand,tag=spawn_holo,distance=..3]"
+        send "§cHologramm in deiner Nähe wurde entfernt!" to player

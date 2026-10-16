@@ -1,0 +1,231 @@
+# =========================================================
+# BEDWARS TAB-VERVOLLSTAENDIGUNG (dritte Datei, braucht skript-reflect, KEIN SkBee)
+# Mit der Tab-Taste werden Spieler, Unterbefehle, Arenen und Betraege vorgeschlagen,
+# z.B. /pay <Tab> -> alle Online-Spieler, danach <Tab> -> Betraege.
+# Nutzt das Paper-Ereignis AsyncTabCompleteEvent (laeuft in einem Nebenthread, deshalb
+# werden Spieler/Welten nur ueber einen Zwischenspeicher gelesen, der alle 3 Sekunden
+# vom Hauptthread aktualisiert wird). Alle Aliase (/jr, /konto, /points ...) werden erkannt.
+# =========================================================
+
+import:
+    com.destroystokyo.paper.event.server.AsyncTabCompleteEvent
+    java.util.ArrayList
+
+# Zwischenspeicher (Hauptthread)
+function bwTcRefresh():
+    delete {-bwtc::online::*}
+    delete {-bwtc::game::*}
+    delete {-bwtc::arenas::*}
+    delete {-bwtc::spec::*}
+    delete {-bwtc::jrn::*}
+    loop all players:
+        add name of loop-player to {-bwtc::online::*}
+        if bwInGame(loop-player) is true:
+            add name of loop-player to {-bwtc::game::*}
+        # Jump & Run: wie viele Checkpoints hat der Spieler erreicht (fuer /jn checkpoint <Tab>)
+        if {-bwx::jr::active::%uuid of loop-player%} is true:
+            set {-bwtc::jrn::%name of loop-player%} to {-bwx::jr::n::%uuid of loop-player%}
+    loop all worlds:
+        if bwIsArena(loop-world) is true:
+            add name of loop-world to {-bwtc::arenas::*}
+    loop bwSpecWorlds():
+        add name of loop-value to {-bwtc::spec::*}
+
+on load:
+    bwTcRefresh()
+
+every 3 seconds:
+    bwTcRefresh()
+
+on join:
+    wait 1 tick
+    bwTcRefresh()
+
+# Alle bekannten Spieler (online + Spieler mit Skript-Daten)
+function bwTcKnown() :: texts:
+    set {_r::*} to {-bwtc::online::*}
+    loop {bwx::name::*}:
+        if {_r::*} does not contain "%loop-value%":
+            add "%loop-value%" to {_r::*}
+    return {_r::*}
+
+# Moegliche Eingaben fuer das Wort Nr. {_pos} (1 = erstes Argument) von Befehl {_c}.
+# {_a1}/{_a2}: bereits getippte Argumente 1 und 2 (klein geschrieben, sonst "")
+function bwTcCandidates(me: text, c: text, pos: number, a1: text, a2: text) :: texts:
+    if {_c} is "pay":
+        if {_pos} is 1:
+            loop {-bwtc::online::*}:
+                if "%loop-value%" is not {_me}:
+                    add "%loop-value%" to {_r::*}
+        else if {_pos} is 2:
+            add "1" and "10" and "50" and "100" and "500" and "1000" to {_r::*}
+    else if {_c} is "stats" or "punkte" or "points" or "level" or "bwlevel":
+        if {_pos} is 1:
+            set {_r::*} to bwTcKnown()
+            if {_c} is not "stats":
+                add "add" to {_r::*}
+        else if {_pos} is 2:
+            if {_c} is not "stats":
+                if {_a1} is "add":
+                    set {_r::*} to bwTcKnown()
+        else if {_pos} is 3:
+            if {_c} is not "stats":
+                if {_a1} is "add":
+                    add "1" and "5" and "10" and "25" to {_r::*}
+    else if {_c} is "bwpoints":
+        if {_pos} is 1:
+            add "join" and "kill" and "finalkill" and "bed" and "win" to {_r::*}
+        else if {_pos} is 2:
+            set {_r::*} to bwTcKnown()
+    else if {_c} is "addpoints":
+        if {_pos} is 1:
+            set {_r::*} to bwTcKnown()
+        else if {_pos} is 2:
+            add "10" and "100" and "1000" and "10000" to {_r::*}
+    else if {_c} is "top" or "leaderboard" or "bestenliste":
+        if {_pos} is 1:
+            add "kills" and "wins" and "beds" and "finalkills" and "games" and "deaths" and "level" and "punkte" to {_r::*}
+    else if {_c} is "spectate" or "zuschauen":
+        if {_pos} is 1:
+            set {_r::*} to {-bwtc::spec::*}
+            loop {-bwtc::game::*}:
+                add "%loop-value%" to {_r::*}
+            add "frei" and "leave" to {_r::*}
+    else if {_c} is "bank" or "konto":
+        if {_pos} is 1:
+            add "einzahlen" and "auszahlen" to {_r::*}
+        else if {_pos} is 2:
+            add "alles" and "10" and "100" and "500" and "1000" to {_r::*}
+    else if {_c} is "gamble" or "gluecksrad" or "wheel":
+        if {_pos} is 1:
+            add "rad" and "muenzwurf" and "slots" and "roulette" and "blackjack" and "bonus" and "stats" to {_r::*}
+    else if {_c} is "jumprun" or "jr" or "jn":
+        if {_pos} is 1:
+            add "checkpoint" and "list" and "stop" and "setfinish" and "delfinish" to {_r::*}
+        else if {_pos} is 2:
+            if {_a1} is "checkpoint" or "cp":
+                add "start" to {_r::*}
+                set {_k} to {-bwtc::jrn::%{_me}%}
+                if {_k} is set:
+                    loop {_k} times:
+                        add "%loop-number%" to {_r::*}
+    else if {_c} is "musik" or "music":
+        # /musik play <Distanz> <Datei>: Dateien kommen aus dem Ordner plugins/Musik (siehe BedwarsMusik.sk)
+        if {_pos} is 1:
+            add "play" and "stop" and "list" and "reload" to {_r::*}
+        else if {_pos} is 2:
+            if {_a1} is "play":
+                add "16" and "30" and "50" and "75" and "100" to {_r::*}
+        else if {_pos} is 3:
+            if {_a1} is "play":
+                loop {-bwx::music::files::*}:
+                    add "%loop-value%" to {_r::*}
+    else if {_c} is "inhaber" or "owner" or "owners":
+        if {_pos} is 1:
+            add "add" and "remove" to {_r::*}
+        else if {_pos} is 2:
+            if {_a1} is "add":
+                set {_r::*} to bwTcKnown()
+            else if {_a1} is "remove":
+                loop {bwx::owner::*}:
+                    add "%loop-index%" to {_r::*}
+        else if {_pos} is 3:
+            if {_a1} is "add":
+                add "Inhaber" and "Admin" and "Moderator" and "Helfer" and "Builder" and "VIP" to {_r::*}
+    else if {_c} is "resetstats":
+        if {_pos} is 1:
+            set {_r::*} to bwTcKnown()
+            add "all" to {_r::*}
+        else if {_pos} is 2:
+            if {_a1} is "all":
+                add "confirm" to {_r::*}
+            else:
+                add "kosmetik" to {_r::*}
+        else if {_pos} is 3:
+            add "kosmetik" to {_r::*}
+    else if {_c} is "xp":
+        if {_pos} is 1:
+            add "reset" to {_r::*}
+        else if {_pos} is 2:
+            if {_a1} is "reset":
+                set {_r::*} to bwTcKnown()
+    else if {_c} is "game":
+        if {_pos} is 1:
+            add "stop" to {_r::*}
+        else if {_pos} is 2:
+            set {_r::*} to {-bwtc::arenas::*}
+    else if {_c} is "cancelgame" or "stopgame":
+        if {_pos} is 1:
+            set {_r::*} to {-bwtc::arenas::*}
+    else if {_c} is "bwroundstart":
+        if {_pos} is 1:
+            set {_r::*} to {-bwtc::arenas::*}
+        else if {_pos} is 2:
+            add "start" and "end" to {_r::*}
+    else if {_c} is "vorschlaege" or "vorschläge" or "suggestions":
+        if {_pos} is 1:
+            add "list" and "lesen" and "erledigt" and "loeschen" and "clear" and "reset" and "cooldown" to {_r::*}
+        else if {_pos} is 2:
+            if {_a1} is "lesen" or "erledigt" or "loeschen":
+                set {_r::*} to bwSugIds()
+            else if {_a1} is "cooldown":
+                set {_r::*} to bwTcKnown()
+            else if {_a1} is "reset":
+                add "confirm" to {_r::*}
+    else if {_c} is "emeraldspawner":
+        if {_pos} is 1:
+            add "add" and "remove" and "list" and "template" to {_r::*}
+        else if {_pos} is 2:
+            if {_a1} is "remove":
+                loop {bw::esp::*}:
+                    add "%loop-index%" to {_r::*}
+        else if {_pos} is 3:
+            if {_a1} is "add":
+                add "red" and "blue" and "green" and "lime" and "yellow" and "cyan" and "white" and "pink" and "gray" and "black" to {_r::*}
+    return {_r::*}
+
+on AsyncTabCompleteEvent:
+    set {_buf} to "%event.getBuffer()%"
+    if {_buf} does not start with "/":
+        stop
+    if {_buf} does not contain " ":
+        stop
+    set {_me} to "%event.getSender()%"
+    set {_low} to {_buf} in lowercase
+    # Endet der Text mit Leerzeichen, beginnt ein NEUES Wort (Skript liefert beim Split ein leeres Wort
+    # am Ende mit, deshalb Leerzeichen am Ende vorher entfernen und merken)
+    set {_newword} to false
+    set {_t} to {_low}
+    while {_t} ends with " ":
+        set {_newword} to true
+        set {_t} to subtext of {_t} from characters 1 to (length of {_t} - 1)
+    set {_parts::*} to {_t} split at " "
+    set {_c} to "%{_parts::1}%"
+    replace all "/" with "" in {_c}
+    set {_n} to size of {_parts::*}
+    set {_prefix} to ""
+    set {_pos} to {_n}
+    if {_newword} is true:
+        set {_pos} to {_n} + 1
+    else:
+        set {_prefix} to "%{_parts::%{_n}%}%"
+    # Argument-Position = Wortnummer - 1
+    set {_pos} to {_pos} - 1
+    if {_pos} < 1:
+        stop
+    set {_a1} to ""
+    set {_a2} to ""
+    if {_pos} > 1:
+        set {_a1} to "%{_parts::2}%"
+    if {_pos} > 2:
+        set {_a2} to "%{_parts::3}%"
+    set {_cand::*} to bwTcCandidates({_me}, {_c}, {_pos}, {_a1}, {_a2})
+    if size of {_cand::*} is 0:
+        stop
+    set {_list} to new ArrayList()
+    loop {_cand::*}:
+        set {_v} to "%loop-value%"
+        if ({_v} in lowercase) starts with {_prefix}:
+            {_list}.add({_v})
+    event.setCompletions({_list})
+    event.setHandled(true)
