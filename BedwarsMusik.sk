@@ -1,0 +1,304 @@
+# =========================================================
+# BEDWARS MUSIK v2 (braucht skript-reflect, KEIN SkBee)
+# =========================================================
+# ADMIN (nur OPs / Konsole):
+#   /musik play <Distanz> <Datei> [Sekunden]   Musik an DEINER Position starten (Server-Musik)
+#   /musik stop                                Musik fuer alle beenden
+#   /musik reset [alle]                        Musik-Status zuruecksetzen (alle = auch Spieler-Einstellungen)
+#   /musik list | /musik reload                Dateien anzeigen / Ordner neu einlesen
+# SPIELER:
+#   /musik oeffnet die persoenlichen Einstellungen (an/aus, Lautstaerke 25/50/75/100 Prozent).
+#   Aus /chelp heraus: bwMusicSettings(player) aufrufen.
+#
+# SO FUNKTIONIERT ES:
+# - Die Musik gehoert dem SERVER, nicht dem Spieler: Es gibt EINE Quelle (Ort + Hoerweite + Titel).
+#   Alle Spieler in Reichweite bekommen den Titel im selben Moment gestartet -> alle hoeren dasselbe.
+# - Die Hoerweite ist exakt in Bloecken (Skript prueft den Abstand jede Sekunde). Wer die Zone verlaesst,
+#   dem wird die Musik gestoppt. Mono/Stereo spielt keine Rolle mehr.
+# - Minecraft kann nicht mitten in einem Titel einsteigen. Wer spaeter kommt / reinlaeuft / Musik wieder
+#   einschaltet, hoert ab dem naechsten Durchlauf mit. Dafuer die Laenge in Sekunden angeben:
+#   /musik play 30 lobby_theme 185  -> der Titel wiederholt sich alle 185 Sekunden (Laenge wird gemerkt).
+# - Ohne Laenge laeuft der Titel nur einmal.
+# - Die Musik-Quelle ist nur im Arbeitsspeicher (nach Neustart aus). Spieler-Einstellungen bleiben gespeichert.
+#
+# RESOURCE PACK: .ogg-Dateien nach plugins/Musik (nur a-z, 0-9, _ und -), Pack mit musik_pack_bauen.py
+# bauen und in der server.properties eintragen. Sound-Namen im Pack: musik:<dateiname>
+# =========================================================
+
+import:
+    java.io.File
+
+options:
+    music_dir: plugins/Musik
+    music_max_dist: 200
+
+# Ordner einlesen -> {-bwx::music::files::*} (Namen ohne .ogg)
+function bwMusicScan():
+    delete {-bwx::music::files::*}
+    set {_dir} to new File("{@music_dir}")
+    {_dir}.mkdirs()
+    set {_names::*} to ...{_dir}.list()
+    loop sorted {_names::*}:
+        set {_f} to "%loop-value%"
+        if {_f} ends with ".ogg":
+            set {_b} to subtext of {_f} from characters 1 to (length of {_f} - 4)
+            if {_b} matches "[a-z0-9_-]+":
+                add {_b} to {-bwx::music::files::*}
+            else if {-bwx::music::warned::%{_f}%} is not set:
+                set {-bwx::music::warned::%{_f}%} to true
+                send "&c[Musik] Ungültiger Dateiname (erlaubt: a-z, 0-9, _ und -): %{_f}%" to console
+
+on load:
+    bwMusicScan()
+
+every 60 seconds:
+    bwMusicScan()
+
+# ---------------------------------------------------------
+# SPIELER-EINSTELLUNGEN (gespeichert)
+# ---------------------------------------------------------
+function bwMusicOn(u: text) :: boolean:
+    if {bwx::music::off::%{_u}%} is set:
+        return false
+    return true
+
+function bwMusicVol(u: text) :: number:
+    if {bwx::music::vol::%{_u}%} is not set:
+        return 100
+    return {bwx::music::vol::%{_u}%}
+
+# ---------------------------------------------------------
+# SERVER-MUSIK
+# ---------------------------------------------------------
+function bwMusicInZone(p: player) :: boolean:
+    if {-bwx::music::file} is not set:
+        return false
+    if bwMusicOn("%uuid of {_p}%") is not true:
+        return false
+    if world of {_p} is not world of {-bwx::music::loc}:
+        return false
+    if distance between (location of {_p}) and {-bwx::music::loc} > {-bwx::music::dist}:
+        return false
+    return true
+
+function bwMusicHear(p: player):
+    set {_u} to "%uuid of {_p}%"
+    set {_v} to bwMusicVol({_u}) / 100
+    play sound "musik:%{-bwx::music::file}%" with volume {_v} and pitch 1 to {_p}
+    set {-bwx::music::hear::%{_u}%} to true
+
+# Alles stoppen und Status loeschen
+function bwMusicHalt():
+    loop {-bwx::music::files::*}:
+        stop sound "musik:%loop-value%" for all players
+    loop {-bwx::music::played::*}:
+        stop sound "musik:%loop-index%" for all players
+    delete {-bwx::music::played::*}
+    delete {-bwx::music::file}
+    delete {-bwx::music::loc}
+    delete {-bwx::music::dist}
+    delete {-bwx::music::len}
+    delete {-bwx::music::sec}
+    delete {-bwx::music::hear::*}
+
+# Titel fuer ALLE Spieler in der Zone gleichzeitig (neu) starten
+function bwMusicStart():
+    if {-bwx::music::file} is not set:
+        stop
+    stop sound "musik:%{-bwx::music::file}%" for all players
+    delete {-bwx::music::hear::*}
+    set {-bwx::music::sec} to 0
+    loop all players:
+        if bwMusicInZone(loop-player) is true:
+            bwMusicHear(loop-player)
+
+every second:
+    if {-bwx::music::file} is not set:
+        stop
+    add 1 to {-bwx::music::sec}
+    if {-bwx::music::len} is set:
+        if {-bwx::music::sec} >= {-bwx::music::len}:
+            bwMusicStart()
+            stop
+    loop all players:
+        set {_u} to "%uuid of loop-player%"
+        set {_in} to bwMusicInZone(loop-player)
+        if {-bwx::music::hear::%{_u}%} is set:
+            if {_in} is not true:
+                stop sound "musik:%{-bwx::music::file}%" for loop-player
+                delete {-bwx::music::hear::%{_u}%}
+        else if {_in} is true:
+            if {-bwx::music::sec} <= 3:
+                bwMusicHear(loop-player)
+
+on quit:
+    delete {-bwx::music::hear::%uuid of player%}
+
+# ---------------------------------------------------------
+# EINSTELLUNGS-MENUE (auch aus /chelp aufrufbar: bwMusicSettings(player))
+# ---------------------------------------------------------
+function bwMusicSettings(p: player):
+    set {_u} to "%uuid of {_p}%"
+    set {_vol} to bwMusicVol({_u})
+    set {_inv} to chest inventory with 3 rows named "&9&lMusik-Einstellungen"
+    loop 27 times:
+        set {_s} to loop-number - 1
+        set slot {_s} of {_inv} to gray stained glass pane named " "
+    set {_x} to note block named "&6&lServer-Musik"
+    if {-bwx::music::file} is set:
+        set lore of {_x} to "&7Es läuft: &f%{-bwx::music::file}%" and "&7Hörweite: &e%{-bwx::music::dist}% &7Blöcke" and "&8Alle Spieler hören dasselbe."
+    else:
+        set lore of {_x} to "&7Gerade läuft keine Musik." and "&8Alle Spieler hören dasselbe."
+    set slot 4 of {_inv} to {_x}
+    if bwMusicOn({_u}) is true:
+        set {_x} to lime dye named "&a&lMusik: AN"
+        set lore of {_x} to "&7Klick zum Ausschalten"
+    else:
+        set {_x} to gray dye named "&c&lMusik: AUS"
+        set lore of {_x} to "&7Klick zum Einschalten"
+    set slot 11 of {_inv} to {_x}
+    set {_n} to 0
+    loop 25, 50, 75 and 100:
+        set {_l} to loop-value
+        if {_vol} is {_l}:
+            set {_x} to lime concrete named "&a&l► Lautstärke %{_l}% Prozent ◄"
+            set lore of {_x} to "&7Aktuell gewählt"
+        else:
+            set {_x} to gray concrete named "&7Lautstärke %{_l}% Prozent"
+            set lore of {_x} to "&7Klick zum Wählen" and "&8Gilt ab dem nächsten Start des Titels."
+        set {_sl} to 13 + {_n}
+        set slot {_sl} of {_inv} to {_x}
+        add 1 to {_n}
+    set {_x} to barrier named "&c&lSchließen"
+    set slot 22 of {_inv} to {_x}
+    open {_inv} to {_p}
+
+on inventory click:
+    if "%name of player's current inventory%" does not contain "Musik-Einstellungen":
+        stop
+    cancel event
+    if event-item is not set:
+        stop
+    set {_n} to "%name of event-item%"
+    set {_u} to "%uuid of player%"
+    if {_n} contains "Schließen":
+        close player's inventory
+        stop
+    if {_n} contains "Musik: ":
+        if bwMusicOn({_u}) is true:
+            set {bwx::music::off::%{_u}%} to true
+            if {-bwx::music::file} is set:
+                stop sound "musik:%{-bwx::music::file}%" for player
+            delete {-bwx::music::hear::%{_u}%}
+            send action bar "&c✘ Musik aus" to player
+        else:
+            delete {bwx::music::off::%{_u}%}
+            send action bar "&a✔ Musik an &8- &7du steigst beim nächsten Start des Titels ein" to player
+        wait 1 tick
+        bwMusicSettings(player)
+        stop
+    loop 25, 50, 75 and 100:
+        if {_n} contains "Lautstärke %loop-value% Prozent":
+            set {bwx::music::vol::%{_u}%} to loop-value
+            send action bar "&a✔ Lautstärke: %loop-value% Prozent" to player
+            wait 1 tick
+            bwMusicSettings(player)
+            stop
+
+# ---------------------------------------------------------
+# BEFEHL
+# ---------------------------------------------------------
+command /musik [<text>] [<text>] [<text>] [<text>]:
+    aliases: music
+    usage: /musik | play <Distanz> <Datei> [Sekunden] | stop | reset | list | reload
+    trigger:
+        if arg-1 is not set:
+            if sender is a player:
+                bwMusicSettings(player)
+            else:
+                send "&6[Musik] &7Nutzung: &e/musik play <Distanz> <Datei> [Sekunden] &8| &e/musik stop &8| &e/musik reset &8| &e/musik list &8| &e/musik reload" to sender
+            stop
+        if sender is not op:
+            send "&cKeine Berechtigung." to sender
+            stop
+        if arg-1 is "reload":
+            bwMusicScan()
+            send "&6[Musik] &7Ordner neu eingelesen: &e%size of {-bwx::music::files::*}% &7Datei(en)." to sender
+            stop
+        if arg-1 is "list" or "liste":
+            bwMusicScan()
+            if size of {-bwx::music::files::*} is 0:
+                send "&6[Musik] &7Keine .ogg-Dateien in &f{@music_dir} &7gefunden. Dateinamen: nur a-z, 0-9, _ und -" to sender
+                stop
+            send "&6[Musik] &7Dateien (&e%size of {-bwx::music::files::*}%&7):" to sender
+            loop {-bwx::music::files::*}:
+                send "&8- &f%loop-value%" to sender
+            send "&7Abspielen: &e/musik play <Distanz> <Datei> [Sekunden]" to sender
+            stop
+        if arg-1 is "stop":
+            bwMusicHalt()
+            send "&6[Musik] &7Musik für alle Spieler beendet." to sender
+            stop
+        if arg-1 is "reset":
+            bwMusicHalt()
+            if arg-2 is "alle":
+                delete {bwx::music::off::*}
+                delete {bwx::music::vol::*}
+                delete {bwx::music::len::*}
+                send "&6[Musik] &7Zurückgesetzt: Musik-Status, Spieler-Einstellungen und gemerkte Längen." to sender
+            else:
+                send "&6[Musik] &7Musik-Status zurückgesetzt. &8(&e/musik reset alle &8setzt auch Spieler-Einstellungen zurück)" to sender
+            bwMusicScan()
+            stop
+        if arg-1 is "play" or "abspielen":
+            if sender is not a player:
+                send "&cNur für Spieler (die Musik startet an deiner Position)!" to sender
+                stop
+            if arg-2 is not set:
+                send "&cNutzung: /musik play <Distanz> <Datei> [Sekunden]" to player
+                stop
+            if arg-3 is not set:
+                send "&cNutzung: /musik play <Distanz> <Datei> [Sekunden] &7(Dateien: /musik list)" to player
+                stop
+            set {_dist} to arg-2 parsed as number
+            if {_dist} is not set:
+                send "&cDie Distanz muss eine Zahl sein (Blöcke), z.B. &e30&c." to player
+                stop
+            if {_dist} < 1:
+                set {_dist} to 1
+            if {_dist} > {@music_max_dist}:
+                set {_dist} to {@music_max_dist}
+            set {_n} to arg-3 in lowercase
+            if {_n} ends with ".ogg":
+                set {_n} to subtext of {_n} from characters 1 to (length of {_n} - 4)
+            bwMusicScan()
+            if {-bwx::music::files::*} does not contain {_n}:
+                send "&cDatei &f%{_n}% &cnicht gefunden. Vorhandene Dateien: &e/musik list" to player
+                stop
+            set {_len} to 0
+            if arg-4 is set:
+                set {_len} to arg-4 parsed as number
+                if {_len} is not set:
+                    send "&cDie Länge muss eine Zahl sein (Sekunden), z.B. &e185&c." to player
+                    stop
+                if {_len} > 0:
+                    set {bwx::music::len::%{_n}%} to {_len}
+            if {_len} is 0:
+                if {bwx::music::len::%{_n}%} is set:
+                    set {_len} to {bwx::music::len::%{_n}%}
+            bwMusicHalt()
+            set {-bwx::music::file} to {_n}
+            set {-bwx::music::loc} to location of player
+            set {-bwx::music::dist} to {_dist}
+            set {-bwx::music::played::%{_n}%} to true
+            if {_len} > 0:
+                set {-bwx::music::len} to {_len}
+            bwMusicStart()
+            send "&6[Musik] &7Server-Musik &f%{_n}% &7läuft für alle Spieler im Umkreis von &e%{_dist}% &7Blöcken um deine Position." to player
+            if {_len} > 0:
+                send "&8Wiederholung alle %{_len}% Sekunden. Wer später dazukommt, steigt beim nächsten Durchlauf ein." to player
+            else:
+                send "&8Ohne Länge läuft der Titel nur einmal. Mit &e/musik play %{_dist}% %{_n}% <Sekunden> &8wird er wiederholt." to player
+            send "&8Hörst du nichts? Dann fehlt das Resource Pack mit der Datei oder du hast die Musik in den Einstellungen aus." to player
+            stop
+        send "&6[Musik] &7Nutzung: &e/musik play <Distanz> <Datei> [Sekunden] &8| &e/musik stop &8| &e/musik reset &8| &e/musik list &8| &e/musik reload" to sender
