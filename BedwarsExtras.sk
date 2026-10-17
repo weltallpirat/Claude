@@ -516,7 +516,7 @@ on command:
         stop
     if player is op:
         stop
-    set {_c} to "%command%" in lowercase
+    set {_c} to command in lowercase
     if {_c} is "spectate" or "zuschauen" or "chelp" or "inhaber" or "bw":
         stop
     cancel event
@@ -759,8 +759,10 @@ on quit:
     delete {-bwx::tabcache::%uuid of player%}
 
 function bwTabName(p: player):
-    if "{@tab_skript}" is not "true":
-        if "{@tab_bridge}" is "true":
+    set {_bwopt_tab_skript} to "{@tab_skript}"
+    if {_bwopt_tab_skript} is not "true":
+        set {_bwopt_tab_bridge} to "{@tab_bridge}"
+        if {_bwopt_tab_bridge} is "true":
             bwTabBridge({_p})
         stop
     set {_u} to "%uuid of {_p}%"
@@ -1596,7 +1598,7 @@ function bwCosSync(p: player, announce: boolean):
                 set {bwc::own::%{_u}%::%{_id}%} to true
                 if {_announce} is true:
                     send "&6&l★ &eNeue Kosmetik freigeschaltet: &r%bwCosName({_id})% &7(Level %bwCosLevel({_id})%) &8- &e/kosmetik" to {_p}
-                    send title "&6&lKOSMETIK FREIGESCHALTET!" with subtitle "%bwCosName({_id})%" to {_p} for 3 seconds
+                    send title "&6&lKOSMETIK FREIGESCHALTET!" with subtitle bwCosName({_id}) to {_p} for 3 seconds
                     play sound "entity.player.levelup" with volume 1 and pitch 1.2 to {_p}
 
 # Beim Betreten des Servers nachholen (auch fuer Spieler, die schon ein hohes Level haben)
@@ -1806,7 +1808,8 @@ on chat:
         set {_rem} to {@chat_repeat_minutes} minutes - (difference between {-bwx::chat::first::%{_u}%} and now)
         send "&cDiese Nachricht hast du schon {@chat_repeat_max}x hintereinander geschrieben. In &e%{_rem}% &cdarfst du sie wieder senden." to player
         stop
-    if {@chat_seconds} > 0:
+    set {_bwopt_chat_seconds} to {@chat_seconds}
+    if {_bwopt_chat_seconds} > 0:
         if {-bwx::chat::time::%{_u}%} is set:
             set {_w} to difference between {-bwx::chat::time::%{_u}%} and now
             if {_w} is less than {@chat_seconds} seconds:
@@ -2361,9 +2364,13 @@ function bwStkIcon(id: text) :: item:
     return red bed
 
 function bwStkPrice(id: text) :: number:
-    if {bwm::price::%{_id}%} is not set:
-        set {bwm::price::%{_id}%} to bwStkBase({_id})
-    return {bwm::price::%{_id}%}
+    if {-bwm::price::%{_id}%} is not set:
+        if {bwm::price::%{_id}%} is set:
+            set {-bwm::price::%{_id}%} to {bwm::price::%{_id}%}
+            set {-bwm::prev::%{_id}%} to {bwm::prev::%{_id}%}
+        else:
+            set {-bwm::price::%{_id}%} to bwStkBase({_id})
+    return {-bwm::price::%{_id}%}
 
 function bwStkOwn(u: text, id: text) :: number:
     if {bwm::own::%{_u}%::%{_id}%} is not set:
@@ -2380,7 +2387,7 @@ function bwStkValue(u: text) :: number:
 # Kursänderung seit der Vorminute (Text mit Pfeil)
 function bwStkTrend(id: text) :: text:
     set {_now} to bwStkPrice({_id})
-    set {_old} to {bwm::prev::%{_id}%}
+    set {_old} to {-bwm::prev::%{_id}%}
     if {_old} is not set:
         return "&7■ 0%%"
     set {_ch} to round((({_now} - {_old}) / {_old}) * 1000) / 10
@@ -2401,11 +2408,19 @@ function bwStkTick():
         set {_new} to round({_old} * (1 + (({_chg} + {_pull}) / 100)))
         if {_new} < 1:
             set {_new} to 1
-        set {bwm::prev::%{_id}%} to {_old}
-        set {bwm::price::%{_id}%} to {_new}
+        set {-bwm::prev::%{_id}%} to {_old}
+        set {-bwm::price::%{_id}%} to {_new}
 
 every 1 minute:
     bwStkTick()
+
+# Kurse nur alle 5 Minuten dauerhaft speichern (nicht jede Minute) -> weniger Datenbank-Schreibvorgaenge
+every 5 minutes:
+    loop bwStkIds():
+        if {-bwm::price::%{loop-value}%} is set:
+            if {bwm::price::%{loop-value}%} is not {-bwm::price::%{loop-value}%}:
+                set {bwm::price::%{loop-value}%} to {-bwm::price::%{loop-value}%}
+                set {bwm::prev::%{loop-value}%} to {-bwm::prev::%{loop-value}%}
 
 function bwStkBuy(p: player, id: text, qty: number):
     set {_u} to "%uuid of {_p}%"
@@ -3008,19 +3023,6 @@ function bwHelpChoose(p: player, mode: text):
                         set lore of {_x} to "&7Klicken zum Teleportieren" and "&8[hlp=sel:%loop-number%]"
                     set slot {_n} of {_inv} to {_x}
                     add 1 to {_n}
-    else if {_mode} is "musik":
-        loop {-bwx::music::files::*}:
-            if {_n} < 45:
-                set {_x} to note block named "&f%loop-value%"
-                set lore of {_x} to "&7Klicken, danach Distanz wählen" and "&8[hlp=sel:%loop-value%]"
-                set slot {_n} of {_inv} to {_x}
-                add 1 to {_n}
-    else if {_mode} is "musikdist":
-        loop 16, 30, 50, 75 and 100:
-            set {_x} to compass named "&e%loop-value% Blöcke"
-            set lore of {_x} to "&7So weit ist die Musik zu hören" and "&8[hlp=sel:%loop-value%]"
-            set slot {_n} of {_inv} to {_x}
-            add 1 to {_n}
     if {_n} is 0:
         set {_x} to barrier named "&cNichts zur Auswahl vorhanden"
         set slot 22 of {_inv} to {_x}
@@ -3130,11 +3132,6 @@ function bwHelpCat(p: player, c: text):
         set slot 47 of {_inv} to bwHelpItem(barrier, "&c/xp reset <Spieler>", "&7XP und Level eines Spielers zurücksetzen", "flow:xpreset")
         set slot 48 of {_inv} to bwHelpItem(leather chestplate, "&c/teamitem <Farbe>", "&7Brustplatte einer Teamfarbe holen (z.B. red, blue)", "say:/teamitem <Farbe>")
         set slot 50 of {_inv} to bwHelpItem(spyglass, "&c/itemdebug", "&7Name, Lore und Typ des Items in deiner Hand", "run:itemdebug")
-        set slot 0 of {_inv} to purple banner named "&5&lMusik"
-        set slot 1 of {_inv} to bwHelpItem(note block, "&c/musik play", "&7Datei und Distanz wählen, die Musik spielt an deiner Position", "flow:musik")
-        set slot 2 of {_inv} to bwHelpItem(barrier, "&c/musik stop", "&7Musik für alle Spieler beenden", "run:musik stop")
-        set slot 3 of {_inv} to bwHelpItem(paper, "&c/musik list", "&7Alle Dateien im Ordner plugins/Musik", "run:musik list")
-        set slot 4 of {_inv} to bwHelpItem(clock, "&c/musik reload", "&7Ordner neu einlesen", "run:musik reload")
     set slot {_back} of {_inv} to bwHelpItem(arrow, "&7Zurück", "&7Zum Hauptmenü", "cat:main")
     open {_inv} to {_p}
 
@@ -3187,7 +3184,7 @@ on inventory click:
                 else:
                     send "&6[Hilfe] &7Schreibe jetzt deinen Text in den Chat. &8(&eabbrechen&8 = Abbruch)" to {_p}
                 stop
-            if {_a} is "join" or "gamestop" or "esadd" or "ownrem" or "esrem" or "top" or "resetall" or "jrcp" or "musik":
+            if {_a} is "join" or "gamestop" or "esadd" or "ownrem" or "esrem" or "top" or "resetall" or "jrcp":
                 bwHelpChoose({_p}, {_a})
                 stop
             bwHelpPick({_p}, {_a})
@@ -3195,11 +3192,6 @@ on inventory click:
         if {_a} starts with "sel:":
             replace all "sel:" with "" in {_a}
             set {_mode} to {-bwx::hlp::mode::%{_u}%}
-            if {_mode} is "musik":
-                # Datei gewaehlt -> als naechstes die Distanz waehlen
-                set {-bwx::hlp::target::%{_u}%} to {_a}
-                bwHelpChoose({_p}, "musikdist")
-                stop
             close {_p}'s inventory
             if {_mode} is "join":
                 make {_p} execute command "bw join %{_a}%"
@@ -3209,8 +3201,6 @@ on inventory click:
                 make {_p} execute command "inhaber remove %{_a}%"
             else if {_mode} is "esrem":
                 make {_p} execute command "emeraldspawner remove %{_a}%"
-            else if {_mode} is "musikdist":
-                make {_p} execute command "musik play %{_a}% %{-bwx::hlp::target::%{_u}%}%"
             else if {_mode} is "jrcp":
                 make {_p} execute command "jn checkpoint %{_a}%"
             else if {_mode} is "top":

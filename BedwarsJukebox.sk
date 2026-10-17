@@ -1,0 +1,41 @@
+# =========================================================
+# VANILLA-JUKEBOX IN DAUERSCHLEIFE
+# Schallplatte in eine Jukebox legen -> spielt normal (Vanilla) und beginnt nach dem Ende
+# automatisch von vorn, bis die Platte wieder entnommen wird.
+# Braucht skript-reflect (wie BedwarsTab.sk), KEIN SkBee.
+# =========================================================
+import:
+    org.bukkit.block.Jukebox
+
+# Alte Daten des entfernten Musik-Systems einmalig aufraeumen
+on load:
+    if {bwx::music::*} is set:
+        delete {bwx::music::*}
+
+function bwJbKey(l: location) :: text:
+    return "%world of {_l}%_%floor(x of {_l})%_%floor(y of {_l})%_%floor(z of {_l})%"
+
+# Jukebox merken, sobald jemand sie anklickt und danach eine Platte drin ist
+on right click on jukebox:
+    set {_l} to location of event-block
+    wait 2 ticks
+    if block at {_l} is jukebox:
+        set {_st} to {_l}.getBlock().getState()
+        if {_st}.hasRecord() is true:
+            set {jukebox::%bwJbKey({_l})%} to {_l}
+
+# Alle 5 Sekunden: Ist die Platte zu Ende, wird sie neu gestartet
+every 5 seconds:
+    loop {jukebox::*}:
+        set {_l} to loop-value
+        if chunk at {_l} is not loaded:
+            continue
+        if block at {_l} is not jukebox:
+            delete {jukebox::%loop-index%}
+            continue
+        set {_st} to {_l}.getBlock().getState()
+        if {_st}.hasRecord() is true:
+            if {_st}.isPlaying() is false:
+                {_st}.startPlaying()
+        else:
+            delete {jukebox::%loop-index%}
